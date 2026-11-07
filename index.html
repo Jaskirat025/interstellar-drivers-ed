@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>The Interstellar Driver's Ed · Rebel-SpaceX Flight Simulator</title>
+  <meta name="description" content="A Star Wars-inspired SpaceX flight simulator for the desktop, built for MLH Hack Week: three branching missions, simulated sponsor integrations, no dependencies.">
+  <style>
+    :root{--bg:#000000;--yellow:#FFE81F;--muted:#8B96A3;--text:#C9D1D9;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+    *,*::before,*::after{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.65;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+    h1,h2,h3{margin:0;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:.08em;line-height:1.08}
+    p{margin:0}
+    a{color:inherit}
+    .wrap{width:100%;max-width:72rem;margin:0 auto;padding-inline:clamp(1.25rem,5vw,3.5rem)}
+    .skip{position:absolute;left:-9999px;top:0;background:var(--yellow);color:var(--bg);padding:.5rem .75rem;font-size:.8rem;z-index:40}
+    .skip:focus{left:1rem;top:1rem}
+    :focus-visible{outline:2px solid var(--yellow);outline-offset:3px}
+    .stars{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+    .stars__drift{animation:drift 150s ease-in-out infinite alternate}
+    @keyframes drift{from{transform:translateY(-10px)}to{transform:translateY(14px)}}
+    .nav{position:fixed;inset:0 0 auto 0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:.5rem;height:4rem;padding-inline:clamp(1rem,4vw,2.5rem);background:var(--bg);border-bottom:1px solid var(--muted)}
+    .brand{color:var(--yellow);text-decoration:none;font-size:clamp(.55rem,1.3vw,.72rem);letter-spacing:.22em;text-transform:uppercase;white-space:nowrap}
+    .nav-action{font-family:inherit;font-size:clamp(.55rem,1.3vw,.68rem);letter-spacing:.12em;text-transform:uppercase;color:var(--text);background:transparent;border:1px solid var(--muted);padding:.55rem .85rem;cursor:pointer;transition:background-color .18s ease,color .18s ease,border-color .18s ease}
+    .nav-action:hover{background:var(--yellow);border-color:var(--yellow);color:var(--bg)}
+    main{position:relative;z-index:1;padding-top:4rem}
+    .hero{min-height:calc(100vh - 4rem);display:flex;flex-direction:column;justify-content:center;padding-block:clamp(3rem,9vw,7rem)}
+    .eyebrow{font-size:.68rem;letter-spacing:.3em;text-transform:uppercase;color:var(--muted)}
+    .hero h1{margin-top:clamp(1rem,2.5vw,1.6rem);font-size:clamp(2rem,7.4vw,5rem);letter-spacing:.05em;max-width:20ch}
+    .subtitle{margin-top:clamp(.9rem,2vw,1.3rem);font-size:clamp(.72rem,1.7vw,.95rem);letter-spacing:.3em;text-transform:uppercase;color:var(--text)}
+    .lede{margin-top:clamp(1.4rem,3vw,2rem);max-width:44rem;color:var(--muted);font-size:clamp(.95rem,1.6vw,1.05rem)}
+    .actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:clamp(1.8rem,4vw,2.6rem)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;border:1px solid var(--muted);padding:.85rem 1.35rem;font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;color:var(--text);background:transparent;transition:background-color .18s ease,color .18s ease,border-color .18s ease;text-align:center}
+    .btn:hover{border-color:var(--yellow);background:var(--yellow);color:var(--bg)}
+    .btn--primary{background:var(--yellow);border-color:var(--yellow);color:var(--bg)}
+    .btn--primary:hover{background:var(--bg);color:var(--yellow)}
+    .meta{margin-top:1.25rem;font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .auth-note{margin-top:1.5rem;max-width:46rem;border:1px solid var(--muted);padding:1rem 1.1rem;font-size:.88rem;color:var(--text)}
+    .auth-note strong{display:block;margin-bottom:.35rem;color:var(--yellow);font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:.72rem}
+    .reveal{opacity:0;animation:fade 1s ease-out forwards}
+    .r1{animation-delay:.2s}.r2{animation-delay:1.7s}.r3{animation-delay:3.2s}.r4{animation-delay:4.7s}
+    @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    .section{position:relative;z-index:1;border-top:1px solid var(--muted);padding-block:clamp(3rem,7vw,6rem)}
+    .section-head{max-width:48rem;margin-bottom:clamp(2rem,4vw,2.8rem)}
+    .section-head .eyebrow{margin-bottom:.9rem}
+    .section h2{font-size:clamp(1.4rem,3.6vw,2.2rem)}
+    .downloads{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:1rem}
+    .tile{display:flex;flex-direction:column;gap:.45rem;padding:1.4rem;border:1px solid var(--muted);background:var(--bg);color:var(--text);text-decoration:none;transition:border-color .18s ease}
+    .tile:hover{border-color:var(--yellow)}
+    .tile:hover .tile-title{color:var(--yellow)}
+    .tile-label{font-family:var(--mono);font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+    .tile-title{font-size:.95rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text);transition:color .18s ease}
+    .tile-meta{font-family:var(--mono);font-size:.68rem;color:var(--muted)}
+    .note{margin-top:1.4rem;max-width:52rem;font-size:.85rem;color:var(--muted)}
+    .note b{color:var(--text);font-weight:600}
+    .plan{list-style:none;margin:0;padding:0;border-top:1px solid var(--muted)}
+    .plan li{display:grid;grid-template-columns:3.5rem 1fr;gap:1rem;padding:1.4rem 0;border-bottom:1px solid var(--muted)}
+    .plan-index{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;color:var(--yellow)}
+    .plan h3{font-size:.9rem;letter-spacing:.12em;color:var(--text);margin-bottom:.4rem}
+    .plan p{font-size:.9rem;color:var(--muted);max-width:52rem}
+    .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:clamp(1.5rem,4vw,3rem)}
+    .split h3{font-size:.8rem;letter-spacing:.16em;color:var(--yellow);margin-bottom:.6rem}
+    .split p{font-size:.9rem;color:var(--muted)}
+    footer{position:relative;z-index:1;border-top:1px solid var(--muted);padding-block:2rem}
+    .foot{display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center;justify-content:space-between;font-size:.76rem;color:var(--muted)}
+    .foot nav{display:flex;flex-wrap:wrap;gap:1rem 1.5rem}
+    .foot a{color:var(--text);text-decoration:none;border-bottom:1px solid var(--muted);padding-bottom:1px}
+    .foot a:hover{color:var(--yellow);border-color:var(--yellow)}
+    @media (max-width:640px){.nav{gap:.35rem}.brand{font-size:.55rem;letter-spacing:.12em}.nav-action{font-size:.55rem;letter-spacing:.06em;padding:.45rem .55rem}}
+    @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;animation:none}.stars__drift{animation:none}.btn,.tile,.nav-action{transition:none}}
+  </style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<svg class="stars" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+  <g class="stars__drift">
+    <circle cx="80" cy="70" r="1.2" fill="#8B96A3"/><circle cx="240" cy="140" r="1" fill="#C9D1D9"/><circle cx="420" cy="60" r="1.6" fill="#8B96A3"/><circle cx="610" cy="120" r="1" fill="#8B96A3"/><circle cx="780" cy="80" r="1.3" fill="#C9D1D9"/><circle cx="960" cy="150" r="1" fill="#8B96A3"/><circle cx="1120" cy="60" r="1.5" fill="#8B96A3"/><circle cx="1300" cy="110" r="1" fill="#C9D1D9"/><circle cx="1470" cy="70" r="1.2" fill="#8B96A3"/>
+    <circle cx="120" cy="260" r="1" fill="#C9D1D9"/><circle cx="330" cy="310" r="1.4" fill="#8B96A3"/><circle cx="520" cy="240" r="1" fill="#8B96A3"/><circle cx="700" cy="330" r="1.2" fill="#C9D1D9"/><circle cx="900" cy="270" r="1" fill="#8B96A3"/><circle cx="1080" cy="340" r="1.5" fill="#8B96A3"/><circle cx="1260" cy="250" r="1" fill="#C9D1D9"/><circle cx="1430" cy="320" r="1.2" fill="#8B96A3"/>
+    <circle cx="60" cy="520" r="1.3" fill="#8B96A3"/><circle cx="260" cy="470" r="1" fill="#C9D1D9"/><circle cx="450" cy="560" r="1.5" fill="#8B96A3"/><circle cx="640" cy="490" r="1" fill="#8B96A3"/><circle cx="830" cy="580" r="1.2" fill="#C9D1D9"/><circle cx="1010" cy="500" r="1" fill="#8B96A3"/><circle cx="1190" cy="560" r="1.4" fill="#8B96A3"/><circle cx="1370" cy="480" r="1" fill="#C9D1D9"/><circle cx="1540" cy="540" r="1.2" fill="#8B96A3"/>
+    <circle cx="150" cy="700" r="1" fill="#8B96A3"/><circle cx="350" cy="760" r="1.3" fill="#C9D1D9"/><circle cx="540" cy="690" r="1" fill="#8B96A3"/><circle cx="730" cy="780" r="1.5" fill="#8B96A3"/><circle cx="920" cy="710" r="1" fill="#C9D1D9"/><circle cx="1110" cy="790" r="1.2" fill="#8B96A3"/><circle cx="1290" cy="700" r="1" fill="#8B96A3"/><circle cx="1460" cy="770" r="1.4" fill="#C9D1D9"/><circle cx="200" cy="850" r="1" fill="#8B96A3"/><circle cx="640" cy="840" r="1.2" fill="#8B96A3"/>
+  </g>
+</svg>
+
+<nav class="nav" aria-label="Primary">
+  <a class="brand" href="#top">Rebel Aerospace Academy</a>
+  <button class="nav-action" id="auth-toggle" type="button" aria-expanded="false" aria-controls="auth-note">Access the Jedi Files · Auth0</button>
+</nav>
+
+<main id="main">
+  <section class="hero wrap" id="top">
+    <p class="eyebrow reveal r1">Rebel Aerospace Academy presents</p>
+    <h1 class="reveal r2">The Interstellar Driver's Ed</h1>
+    <p class="subtitle reveal r3">Rebel-SpaceX Flight Simulator</p>
+    <p class="lede reveal r3">SpaceX engineering, Star Wars decisions: load a methalox stack with a Tibanna additive, trust a droid through a hoverslam onto a Kamino drone ship, and decide how much Beskar your hull can carry. A desktop game built for MLH Hack Week.</p>
+    <div class="actions reveal r4">
+      <a class="btn btn--primary" href="#download">Download the simulator</a>
+      <a class="btn" href="simulator.py">View source (.py)</a>
+    </div>
+    <p class="meta">MLH Hack Week build · Windows · macOS · Python 3.8+ · MIT</p>
+    <div class="auth-note" id="auth-note" role="status" aria-live="polite" tabindex="-1" hidden>
+      <strong>Demo only</strong>
+      Authentication runs as a local simulation inside the desktop app. No request is sent, no account is created and no data is collected.
+    </div>
+  </section>
+
+  <section class="section" id="download">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Release channel</p>
+        <h2>Download the simulator</h2>
+        <p class="lede">Prebuilt desktop bundles are published with every tagged release. Both builds are generated on GitHub Actions runners from the source in this repository.</p>
+      </div>
+      <div class="downloads">
+        <a class="tile" href="https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-Windows.zip">
+          <span class="tile-label">Windows</span>
+          <span class="tile-title">Download for Windows</span>
+          <span class="tile-meta">.zip · 64-bit folder build · unsigned</span>
+        </a>
+        <a class="tile" href="https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-macOS.zip">
+          <span class="tile-label">macOS</span>
+          <span class="tile-title">Download for Mac</span>
+          <span class="tile-meta">.zip · .app bundle · unsigned</span>
+        </a>
+        <a class="tile" href="simulator.py">
+          <span class="tile-label">Source</span>
+          <span class="tile-title">View source (.py)</span>
+          <span class="tile-meta">Python 3.8+ · standard library only</span>
+        </a>
+      </div>
+      <p class="note"><b>Unsigned builds:</b> Windows may show SmartScreen — choose <b>More info</b>, then <b>Run anyway</b>. macOS may block the app — right-click it, choose <b>Open</b>, then <b>Open</b> again.</p>
+    </div>
+  </section>
+
+  <section class="section" id="missions">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Flight plan</p>
+        <h2>Three decisions, one flight log</h2>
+        <p class="lede">Every mission offers three options with different scores and a written consequence. Callsigns, scores and the final rank are held in memory for the session only.</p>
+      </div>
+      <ol class="plan">
+        <li><span class="plan-index">M01</span><div><h3>Propellant load</h3><p>Methane, oxygen and a metered Tibanna additive. Get the mixture right or explain the engine shutdown to the range safety officer.</p></div></li>
+        <li><span class="plan-index">M02</span><div><h3>Autonomous landing</h3><p>A Falcon 9 holds at two kilometres above a pitching drone ship on Kamino. Let the landing droid finish, or take the stick yourself.</p></div></li>
+        <li><span class="plan-index">M03</span><div><h3>Beskar shields</h3><p>A debris field between you and the jump point. Plate the whole hull, layer the leading edges, or fly fast and hope.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="spacex">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Engineering notes</p>
+        <h2>SpaceX, with a Star Wars twist</h2>
+        <p class="lede">Every mission is a real aerospace trade-off wearing a Rebellion paint job.</p>
+      </div>
+      <div class="split">
+        <div><h3>Methalox, not magic</h3><p>Falcon 9 flies on RP-1 and liquid oxygen; Starship moves to subcooled methane and oxygen. Mission 01 borrows that choice, then adds a gas from Bespin.</p></div>
+        <div><h3>The hoverslam</h3><p>A Falcon booster cannot hover. It lights one engine and meets the deck at zero velocity. Mission 02 hands that exact profile to a landing droid over Kamino.</p></div>
+        <div><h3>Shields are mass</h3><p>Dragon uses PICA-X, Starship uses tiles. Mission 03 asks the same question with Beskar: cover everything, cover the leading edges, or carry nothing.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="integrations">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Sponsor integrations</p>
+        <h2>Simulated on purpose</h2>
+      </div>
+      <div class="split">
+        <div><h3>Auth0</h3><p>The login screen is a timed, local animation with a token generated by the app itself. No identity provider is contacted and no credentials are stored.</p></div>
+        <div><h3>Tiger Data</h3><p>The final save writes a few million simulated coordinate rows to a local counter. The hypertable, the progress bar and the row count are presentation only.</p></div>
+        <div><h3>Security</h3><p>The desktop app imports only the Python standard library, opens no sockets, starts no subprocesses and keeps nothing after the window closes. The full source is in this repository.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>Hackathon build · simulated sponsor integrations</span>
+    <nav aria-label="Footer">
+      <a href="simulator.py">Source</a>
+      <a href="https://github.com/Jaskirat025/interstellar-drivers-ed">Repository</a>
+      <a href="https://github.com/Jaskirat025/interstellar-drivers-ed/blob/main/LICENSE">MIT License</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var toggle = document.getElementById("auth-toggle");
+    var note = document.getElementById("auth-note");
+    if (!toggle || !note) return;
+    toggle.addEventListener("click", function () {
+      var open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", open ? "false" : "true");
+      note.hidden = open;
+      if (!open) note.focus();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && !note.hidden) {
+        note.hidden = true;
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.focus();
+      }
+    });
+  })();
+</script>
+</body>
+</html>

@@ -33,6 +33,17 @@ A judge should never need a live tenant or an API key to see the flow. The Auth0
 - Simulated Tiger Data Hypertable Cloud save: progress bar and a counter of millions of coordinate rows written.
 - All `after()` callbacks are cancelled on screen changes and on close.
 
+## Visual archive and landing page
+
+The landing page (`index.html`) is a self-contained companion site. It ships no remote fonts, scripts, or hotlinked images and works from a local static server.
+
+- **Five NASA photographs** in `assets/photos/`: Falcon 9/Crew-9 rollout, Falcon 9 landing after Crew-12, Crew-13 Dragon, Crew-11 approach, and the Cupola sunset. They are resized and toned to the black/grey site palette. The originals are NASA public-domain imagery and are not presented as Star Wars or SpaceX mission assets.
+- **Animated hoverslam loop:** an inline SVG booster descends to a drone-ship deck with a flickering engine, landing ping, and telemetry bar. No GIF, video, or external asset is required.
+- **Scroll-driven interface:** mission slider with snap scrolling, reveal-on-scroll sections, animated counters, twinkling starfield, ticker, HUD scan line, and scroll progress bar. All motion is disabled by `prefers-reduced-motion`.
+- **Photo lightbox:** each frame opens a native `<dialog>` viewer with title, credit, and keyboard/Escape support. Without JavaScript, the same links open the full JPEG directly.
+
+Credits: NASA/Keegan Barber (NHQ202409270003), NASA/John Kraus (NHQ20260213_admin_0009), NASA (iss075e0157531, iss073e0422191, iss071e581260_alt). NASA does not endorse this project. Source: [NASA Image and Video Library](https://images.nasa.gov/).
+
 ## Controls
 
 | Action | Keys |

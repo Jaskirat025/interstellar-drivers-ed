@@ -39,9 +39,12 @@ jobs:
         shell: bash
         run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
 
+      - name: Run core tests
+        run: python -m unittest discover -s tests -v
+
       - name: Build Windows folder app
         if: runner.os == 'Windows'
-        run: pyinstaller --noconfirm --clean --onedir --windowed --noupx --name InterstellarDriversEd simulator.py
+        run: pyinstaller --noconfirm --clean --onedir --windowed --noupx --name InterstellarDriversEd --version-file packaging/version_info.txt simulator.py
 
       - name: Package Windows build
         if: runner.os == 'Windows'
@@ -50,7 +53,7 @@ jobs:
 
       - name: Build macOS app bundle
         if: runner.os == 'macOS'
-        run: pyinstaller --noconfirm --clean --windowed --noupx --name InterstellarDriversEd simulator.py
+        run: pyinstaller --noconfirm --clean --windowed --noupx --name InterstellarDriversEd --osx-bundle-identifier com.rebelaerospace.interstellardriversed simulator.py
 
       - name: Package macOS build
         if: runner.os == 'macOS'

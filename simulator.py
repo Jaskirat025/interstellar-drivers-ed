@@ -1,17 +1,20 @@
 """The Interstellar Driver's Ed: Rebel-SpaceX Flight Simulator.
 
 Single-file Tkinter desktop app built for MLH Hack Week.
-Auth0 and Tiger Data are simulated on this machine only: no network,
-no subprocesses, no persistence.
+Auth0 and Tiger Data are simulated on this machine only: no network and
+no subprocesses. The app keeps one small pilot record in the user's home
+directory; nothing ever leaves the computer.
 """
 
 import hashlib
+import json
 import math
 import random
 import sys
 import time
 import tkinter as tk
 import tkinter.font as tkfont
+from pathlib import Path
 
 BG = "#000000"
 YELLOW = "#FFE81F"
@@ -23,8 +26,10 @@ IS_WIN = sys.platform.startswith("win")
 SANS = "Helvetica Neue" if IS_MAC else ("Segoe UI" if IS_WIN else "DejaVu Sans")
 MONO = "Menlo" if IS_MAC else ("Consolas" if IS_WIN else "DejaVu Sans Mono")
 
+APP_VERSION = "1.1.0"
 WINDOW_TITLE = "The Interstellar Driver's Ed · Rebel-SpaceX Flight Simulator"
-FOOTER_TEXT = "Hackathon build · simulated sponsor integrations"
+FOOTER_TEXT = "v{0} · local pilot log · simulated sponsor integrations".format(APP_VERSION)
+RECORD_FOLDER = ".interstellar_drivers_ed"
 
 
 def fnt(size, weight="normal", mono=False):
@@ -34,6 +39,67 @@ def fnt(size, weight="normal", mono=False):
 def tracked(text):
     """Wide-spaced uppercase, used for titles and small labels."""
     return " ".join(text.upper())
+
+
+class PilotStore:
+    """One local JSON record. Read and write failures never block the game."""
+
+    def __init__(self, path=None):
+        if path is None:
+            try:
+                path = Path.home() / RECORD_FOLDER / "pilot.json"
+            except Exception:
+                path = Path("pilot.json")
+        self.path = Path(path)
+        self.best_score = 0
+        self.best_rank = ""
+        self.flights = 0
+        self.last_callsign = ""
+        self.load()
+
+    def load(self):
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if not isinstance(raw, dict):
+            return
+        try:
+            self.best_score = max(0, min(99999, int(raw.get("best_score", 0))))
+            self.flights = max(0, min(1000000, int(raw.get("flights", 0))))
+        except Exception:
+            self.best_score = 0
+            self.flights = 0
+        callsign = raw.get("last_callsign", "")
+        if isinstance(callsign, str):
+            self.last_callsign = callsign[:20]
+        rank = raw.get("best_rank", "")
+        if isinstance(rank, str):
+            self.best_rank = rank[:32]
+
+    def record(self, score, callsign, rank):
+        """Save a completed flight and return True when the score is a record."""
+        self.flights += 1
+        improved = score > self.best_score
+        if improved:
+            self.best_score = score
+            self.best_rank = rank
+        self.last_callsign = (callsign or "")[:20]
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "version": APP_VERSION,
+                "best_score": self.best_score,
+                "best_rank": self.best_rank,
+                "flights": self.flights,
+                "last_callsign": self.last_callsign,
+            }
+            temporary = self.path.with_name(self.path.name + ".tmp")
+            temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            temporary.replace(self.path)
+        except Exception:
+            pass
+        return improved
 
 
 MISSIONS = [
@@ -194,13 +260,13 @@ MISSIONS = [
     },
 ]
 
-MAX_SCORE = sum(max(o["points"] for o in m["options"]) for m in MISSIONS)
+MAX_SCORE = sum(max(o["points"] for o in m["options"]) + 30 for m in MISSIONS)
 
 RANKS = [
-    (280, "JEDI ACE"),
-    (210, "SQUADRON LEADER"),
-    (140, "SENIOR PILOT"),
-    (70, "FLIGHT CADET"),
+    (350, "JEDI ACE"),
+    (270, "SQUADRON LEADER"),
+    (190, "SENIOR PILOT"),
+    (100, "FLIGHT CADET"),
     (-999, "GROUND CREW"),
 ]
 
@@ -218,6 +284,16 @@ def score_text(score):
 
 def points_text(points):
     return "{0:+d} PTS".format(points)
+
+
+def option_rank(mission, option):
+    """0 = best decision, 1 = partial, 2 = failure; used for difficulty."""
+    best = max(item["points"] for item in mission["options"])
+    if option["points"] == best:
+        return 0
+    if option["points"] > 0:
+        return 1
+    return 2
 
 
 def verdict_colour(verdict):
@@ -388,7 +464,7 @@ class TitleScreen(Screen):
                               highlightthickness=1, highlightbackground=MUTED,
                               highlightcolor=YELLOW, width=26, justify="center")
         self.entry.pack(fill="x", pady=(6, 6), ipady=5)
-        self.entry.insert(0, app.callsign if app.callsign else "CADET-X")
+        self.entry.insert(0, app.callsign or app.pilot.last_callsign or "CADET-X")
         self.hint = tk.Label(self.content,
                              text=("Letters, digits, spaces, hyphens, underscores"
                                    " · 1-20 characters"),
@@ -402,6 +478,15 @@ class TitleScreen(Screen):
                                                               padx=(0, 10))
         FlatButton(actions, app, "QUIT", self.g(app.close),
                    "outline", size=10, padx=24, pady=10).pack(side="left")
+
+        if app.pilot.flights:
+            record = "PILOT RECORD · BEST {0:03d} · {1} FLIGHT{2}".format(
+                app.pilot.best_score, app.pilot.flights,
+                "" if app.pilot.flights == 1 else "S")
+        else:
+            record = "NO FLIGHTS LOGGED · YOUR RECORD STARTS HERE"
+        tk.Label(self.content, text=record, font=fnt(8, mono=True),
+                 bg=BG, fg=MUTED).pack(pady=(18, 0))
 
         self.canvas.bind("<Configure>", self.g(self.on_resize))
         self.entry.bind("<Return>", self.g(self.start))
@@ -585,7 +670,6 @@ class AuthScreen(Screen):
         self.token_label.configure(text="SIMULATED TOKEN · " + self.token)
         self.status.configure(text="SESSION ESTABLISHED (SIMULATED)", fg=YELLOW)
         self.continue_button.set_enabled(True)
-        self.app.schedule(1600, self.app.start_missions)
 
     def proceed(self):
         if not self.finished:
@@ -643,8 +727,11 @@ class MissionScreen(Screen):
         self.text = tk.Label(self.right, text="", font=fnt(11), bg=BG, fg=TEXT,
                              anchor="nw", justify="left", wraplength=460)
         self.text.pack(fill="both", expand=True, pady=(12, 14))
-        tk.Label(self.right, text=tracked(self.mission["prompt"]), font=fnt(8),
-                 bg=BG, fg=MUTED, anchor="w").pack(fill="x", pady=(0, 8))
+        tk.Label(self.right,
+                 text=tracked(self.mission["prompt"])
+                 + "\nFLY THE PROFILE · PERFORMANCE ADDS UP TO +30",
+                 font=fnt(8), bg=BG, fg=MUTED, anchor="w",
+                 justify="left").pack(fill="x", pady=(0, 8))
         for i, option in enumerate(self.mission["options"]):
             button = FlatButton(self.right, self.app,
                                 "{0}   {1}".format(i + 1, option["label"]),
@@ -692,59 +779,8 @@ class MissionScreen(Screen):
             return
         self.locked = True
         option = self.mission["options"][index]
-        self.app.score += option["points"]
-        self.app.results.append({
-            "mission": self.index,
-            "label": option["label"],
-            "points": option["points"],
-            "verdict": option["verdict"],
-        })
         self.score_label.configure(text=score_text(self.app.score))
-        self.show_outcome(option)
-
-    def show_outcome(self, option):
-        backdrop = tk.Frame(self, bg=BG)
-        backdrop.place(x=0, y=0, relwidth=1, relheight=1)
-        backdrop.lift()
-        self.overlay = backdrop
-
-        card = tk.Frame(backdrop, bg=BG, bd=0, highlightthickness=1,
-                        highlightbackground=YELLOW)
-        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.84)
-        inner = tk.Frame(card, bg=BG)
-        inner.pack(fill="both", expand=True, padx=26, pady=22)
-
-        tk.Label(inner, text="MISSION {0:02d} · OUTCOME".format(self.index + 1),
-                 font=fnt(8, mono=True), bg=BG, fg=MUTED,
-                 anchor="w").pack(fill="x")
-        tk.Label(inner, text=tracked(option["verdict"]), font=fnt(16, "bold"),
-                 bg=BG, fg=verdict_colour(option["verdict"]),
-                 anchor="w").pack(fill="x", pady=(6, 2))
-        selected = tk.Label(inner, text="SELECTED · " + option["label"],
-                            font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w",
-                            justify="left", wraplength=560)
-        selected.pack(fill="x")
-        tk.Frame(inner, bg=MUTED, height=1).pack(fill="x", pady=14)
-
-        explanation = tk.Label(inner, text=option["text"], font=fnt(11), bg=BG,
-                               fg=TEXT, anchor="w", justify="left", wraplength=600)
-        explanation.pack(fill="x")
-
-        bottom = tk.Frame(inner, bg=BG)
-        bottom.pack(fill="x", pady=(18, 0))
-        colour = YELLOW if option["points"] > 0 else MUTED
-        tk.Label(bottom, text=points_text(option["points"]),
-                 font=fnt(20, "bold", mono=True), bg=BG,
-                 fg=colour).pack(side="left")
-        FlatButton(bottom, self.app, "CONTINUE", self.g(self.app.advance),
-                   "primary", size=10, padx=18, pady=8).pack(side="right")
-
-        def on_card(event):
-            width = max(220, event.width - 56)
-            explanation.configure(wraplength=width)
-            selected.configure(wraplength=width)
-
-        card.bind("<Configure>", self.g(on_card))
+        self.app.begin_flight(self.index, option)
 
     # -- line art ------------------------------------------------------
     def draw_art(self, _event=None):
@@ -877,6 +913,686 @@ class MissionScreen(Screen):
                       fill=MUTED, font=fnt(8, mono=True), anchor="w")
 
 
+class FlightScreen(Screen):
+    """A playable flight sequence: three profiles, one physics loop."""
+
+    MODES = ("LOAD SEQUENCE", "HOVERSLAM", "DEBRIS RUN")
+
+    def __init__(self, parent, app, index, option):
+        Screen.__init__(self, parent, app)
+        self.index = index
+        self.mission = MISSIONS[index]
+        self.option = option
+        self.rank = option_rank(self.mission, option)
+        self.mode = ("load", "landing", "debris")[index]
+        self.phase = "countdown"
+        self.countdown = 3.0
+        self.elapsed = 0.0
+        self.run_time = 0.0
+        self.last_tick = None
+        self.done = False
+        self.delivered = False
+        self.paused = False
+        self.success = False
+        self.bonus = 0
+        self.result = None
+        self.end_delay = 0.0
+        self.shake = 0.0
+        self.flash = 0.0
+        self.particles = []
+        self.debris = []
+        self.pause_overlay = None
+        self.keys = {"up": False, "down": False, "left": False,
+                     "right": False, "space": False}
+        self.stars = [{"x": random.random(), "y": random.random(),
+                       "r": random.choice((1, 1, 2)),
+                       "c": random.choice((MUTED, MUTED, TEXT))}
+                      for _ in range(72)]
+        self.build()
+        if self.mode == "load":
+            self.setup_load()
+        elif self.mode == "landing":
+            self.setup_landing()
+        else:
+            self.setup_debris()
+        self.app.schedule(30, self.tick)
+
+    def build(self):
+        top = tk.Frame(self, bg=BG)
+        top.pack(fill="x", padx=26, pady=(12, 0))
+        left = tk.Frame(top, bg=BG)
+        left.pack(side="left")
+        tk.Label(left, text="MISSION {0:02d} / 03 · {1}".format(
+            self.index + 1, self.mission["tag"]), font=fnt(8, mono=True),
+            bg=BG, fg=MUTED, anchor="w").pack(anchor="w")
+        self.phase_label = tk.Label(left, text=tracked("Pre-flight"), font=fnt(8),
+                                    bg=BG, fg=MUTED, anchor="w")
+        self.phase_label.pack(anchor="w", pady=(2, 0))
+        right = tk.Frame(top, bg=BG)
+        right.pack(side="right")
+        self.clock_label = tk.Label(right, text="T-03.0", font=fnt(10, "bold", mono=True),
+                                    bg=BG, fg=YELLOW)
+        self.clock_label.pack(side="left", padx=(0, 10))
+        FlatButton(right, self.app, "PAUSE", self.g(self.toggle_pause),
+                   "outline", size=8, padx=10, pady=5).pack(side="left")
+        self.profile_label = tk.Label(
+            self, text="PROFILE · " + self.option["label"], font=fnt(8, mono=True),
+            bg=BG, fg=MUTED, anchor="w")
+        self.profile_label.pack(fill="x", padx=26, pady=(4, 0))
+        tk.Frame(self, bg=MUTED, height=1).pack(fill="x", padx=26, pady=(8, 0))
+        self.canvas = tk.Canvas(self, bg=BG, bd=0, highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True, padx=26)
+        self.canvas.bind("<Configure>", self.g(self.draw))
+        bottom = tk.Frame(self, bg=BG)
+        bottom.pack(fill="x", padx=26, pady=(4, 10))
+        if self.mode == "load":
+            hint = "↑ / ↓  TRIM MIXTURE  ·  HOLD THE BAND  ·  P PAUSE"
+        elif self.mode == "landing":
+            hint = "SPACE / ↑  LANDING BURN  ·  ← →  RCS  ·  P PAUSE"
+        else:
+            hint = "← →  STEER  ·  AVOID THE DEBRIS  ·  P PAUSE"
+        self.hint = tk.Label(bottom, text=hint, font=fnt(8, mono=True),
+                             bg=BG, fg=MUTED, anchor="w")
+        self.hint.pack(side="left")
+        self.status = tk.Label(bottom, text="", font=fnt(8, mono=True),
+                               bg=BG, fg=MUTED, anchor="e")
+        self.status.pack(side="right")
+
+    # -- input ---------------------------------------------------------
+    def on_key(self, name, pressed):
+        if name == "pause":
+            if pressed:
+                self.toggle_pause()
+            return
+        if name in self.keys:
+            self.keys[name] = bool(pressed)
+
+    def clear_keys(self):
+        for name in self.keys:
+            self.keys[name] = False
+
+    def toggle_pause(self):
+        if self.phase == "ending" or self.delivered:
+            return
+        self.paused = not self.paused
+        self.clear_keys()
+        if self.paused:
+            self.show_pause()
+        else:
+            self.hide_pause()
+
+    def show_pause(self):
+        self.pause_overlay = tk.Frame(self, bg=BG)
+        self.pause_overlay.place(x=0, y=0, relwidth=1, relheight=1)
+        self.pause_overlay.lift()
+        card = tk.Frame(self.pause_overlay, bg=BG, highlightthickness=1,
+                        highlightbackground=YELLOW)
+        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.5)
+        inner = tk.Frame(card, bg=BG)
+        inner.pack(fill="both", expand=True, padx=24, pady=20)
+        tk.Label(inner, text=tracked("Simulation held"), font=fnt(16, "bold"),
+                 bg=BG, fg=YELLOW).pack()
+        tk.Label(inner, text="Flight controls are frozen. Resume when ready.",
+                 font=fnt(9), bg=BG, fg=MUTED, wraplength=340,
+                 justify="center").pack(pady=(8, 14))
+        FlatButton(inner, self.app, "RESUME FLIGHT", self.g(self.toggle_pause),
+                   "primary", size=10, padx=16, pady=8).pack(fill="x")
+        FlatButton(inner, self.app, "RESTART FLIGHT",
+                   self.g(lambda: self.app.begin_flight(self.index, self.option)),
+                   "outline", size=9, padx=16, pady=7).pack(fill="x", pady=(8, 0))
+        FlatButton(inner, self.app, "ABORT TO TITLE",
+                   self.g(self.app.abort_flight), "outline", size=9,
+                   padx=16, pady=7).pack(fill="x", pady=(8, 0))
+
+    def hide_pause(self):
+        if self.pause_overlay is not None:
+            try:
+                self.pause_overlay.destroy()
+            except Exception:
+                pass
+            self.pause_overlay = None
+
+    # -- clock ---------------------------------------------------------
+    def tick(self):
+        if not self.winfo_exists():
+            return
+        now = time.monotonic()
+        dt = 0.03 if self.last_tick is None else min(0.06, max(0.001, now - self.last_tick))
+        self.last_tick = now
+        if not self.paused:
+            if self.phase == "countdown":
+                self.countdown -= dt
+                if self.countdown <= 0:
+                    self.countdown = 0.0
+                    self.phase = "flying"
+            elif self.phase == "flying":
+                self.elapsed += dt
+                if self.mode == "load":
+                    self.step_load(dt)
+                elif self.mode == "landing":
+                    self.step_landing(dt)
+                else:
+                    self.step_debris(dt)
+            if self.phase == "ending":
+                self.end_delay -= dt
+                self.shake = max(0.0, self.shake - dt * 26.0)
+                if self.end_delay <= 0 and not self.delivered:
+                    self.delivered = True
+                    self.app.complete_flight(self.index, self.option, self.result)
+                    return
+            self.update_particles(dt)
+            self.flash = max(0.0, self.flash - dt * 3.0)
+        self.update_hud()
+        self.draw()
+        if not self.delivered:
+            self.app.schedule(30 if not self.paused else 120, self.tick)
+
+    def update_hud(self):
+        if self.phase == "countdown":
+            self.clock_label.configure(text="T-{0:03.1f}".format(max(0.0, self.countdown)))
+            label = "PRE-FLIGHT"
+        elif self.phase == "ending":
+            self.clock_label.configure(text="T+{0:04.1f}".format(self.elapsed))
+            label = "DEBRIEF"
+        else:
+            self.clock_label.configure(text="T+{0:04.1f}".format(self.elapsed))
+            label = "FLIGHT ACTIVE · " + self.MODES[self.index]
+        self.phase_label.configure(text=tracked(label))
+        if self.phase == "countdown":
+            self.status.configure(text="READ THE CONTROLS")
+        elif self.mode == "load":
+            stable = self.in_time / max(0.001, self.run_time) * 100.0
+            self.status.configure(text="LOAD {0:03.0f}% · STABILITY {1:03.0f}%".format(
+                self.load, stable))
+        elif self.mode == "landing":
+            self.status.configure(text="V/S {0:+.1f} M/S · FUEL {1:03.0f}%".format(
+                self.vy, self.fuel))
+        else:
+            self.status.configure(text="HULL {0}/{1} · CLOSE {2}".format(
+                self.hull, self.max_hull, self.close_calls))
+
+    def finish(self, success, bonus, stats, title):
+        if self.phase == "ending":
+            return
+        self.success = bool(success)
+        self.bonus = max(0, min(30, int(bonus)))
+        self.result = {"success": self.success, "bonus": self.bonus,
+                       "stats": stats, "title": title}
+        self.phase = "ending"
+        self.end_delay = 1.1 if success else 1.5
+        self.flash = 0.45 if success else 0.0
+        if not success:
+            self.shake = 14.0
+            self.spawn_burst(0.5, 0.78, 22)
+
+    def begin_now(self):
+        self.countdown = 0.0
+        self.phase = "flying"
+
+    # -- particles -----------------------------------------------------
+    def spawn_burst(self, x, y, count=14):
+        for _ in range(count):
+            angle = random.uniform(0, math.pi * 2)
+            speed = random.uniform(0.05, 0.32)
+            life = random.uniform(0.35, 0.95)
+            self.particles.append({"x": x, "y": y,
+                                   "vx": math.cos(angle) * speed,
+                                   "vy": math.sin(angle) * speed - 0.05,
+                                   "life": life, "max": life,
+                                   "c": random.choice((YELLOW, TEXT, MUTED))})
+        self.particles = self.particles[-180:]
+
+    def update_particles(self, dt):
+        alive = []
+        for p in self.particles:
+            p["life"] -= dt
+            if p["life"] <= 0:
+                continue
+            p["x"] += p["vx"] * dt
+            p["y"] += p["vy"] * dt
+            p["vy"] += 0.2 * dt
+            alive.append(p)
+        self.particles = alive
+
+    def draw_particles(self, c, w, h):
+        for p in self.particles:
+            r = 1 + 2 * (p["life"] / p["max"])
+            x, y = p["x"] * w, p["y"] * h
+            c.create_oval(x - r, y - r, x + r, y + r, fill=p["c"], outline="")
+
+    # -- load profile --------------------------------------------------
+    def setup_load(self):
+        self.band = (16.0, 12.0, 9.0)[self.rank]
+        self.load_rate = (8.0, 6.4, 5.1)[self.rank]
+        self.target_speed = (0.52, 0.68, 0.86)[self.rank]
+        self.mix = 50.0
+        self.target = 50.0
+        self.load = 0.0
+        self.in_time = 0.0
+        self.strain = 0.0
+
+    def step_load(self, dt):
+        self.run_time += dt
+        t = self.run_time
+        self.target = 50.0 + 30.0 * math.sin(t * self.target_speed) + 7.0 * math.sin(t * 2.2 + 0.6)
+        self.target = max(6.0, min(94.0, self.target))
+        if self.keys["up"]:
+            self.mix += 52.0 * dt
+        if self.keys["down"]:
+            self.mix -= 52.0 * dt
+        self.mix = max(0.0, min(100.0, self.mix))
+        error = abs(self.mix - self.target)
+        stable = error <= self.band
+        if stable:
+            self.load += self.load_rate * dt
+            self.in_time += dt
+        else:
+            self.load += 1.0 * dt
+        self.load = min(100.0, self.load)
+        if error > self.band * 2.0:
+            self.strain += dt
+        else:
+            self.strain = max(0.0, self.strain - dt * 0.7)
+        if self.strain >= 3.0:
+            self.finish(False, 0, {"mode": "load", "stability": 0.0,
+                                   "load": self.load}, "PAD ABORT")
+        elif self.load >= 100.0:
+            ratio = self.in_time / max(0.001, self.run_time)
+            self.finish(True, int(round(ratio * 30.0)),
+                        {"mode": "load", "stability": ratio * 100.0,
+                         "load": self.load}, "LOAD COMPLETE")
+        elif self.run_time >= 20.0:
+            ratio = self.in_time / max(0.001, self.run_time)
+            self.finish(False, 0, {"mode": "load", "stability": ratio * 100.0,
+                                   "load": self.load}, "PAD ABORT")
+
+    # -- landing profile -----------------------------------------------
+    def setup_landing(self):
+        self.alt_max = 850.0
+        self.alt = (700.0, 760.0, 820.0)[self.rank]
+        self.vy = -(32.0 + 4.0 * self.rank)
+        self.x = random.uniform(-80.0, 80.0)
+        self.vx = random.uniform(-3.0, 3.0)
+        self.fuel = (100.0, 88.0, 76.0)[self.rank]
+        self.wind_strength = (1.2, 2.0, 3.0)[self.rank]
+        self.target_half = (34.0, 27.0, 21.0)[self.rank]
+        self.burning = False
+
+    def step_landing(self, dt):
+        self.run_time += dt
+        self.burning = (self.keys["space"] or self.keys["up"]) and self.fuel > 0
+        if self.burning:
+            self.vy += 12.5 * dt
+            self.fuel = max(0.0, self.fuel - 7.0 * dt)
+        self.vy -= 3.8 * dt
+        self.vx += self.wind_strength * 0.45 * dt * math.sin(self.run_time * 0.85 + 0.5)
+        if self.keys["left"]:
+            self.vx -= 18.0 * dt
+        if self.keys["right"]:
+            self.vx += 18.0 * dt
+        self.vx *= max(0.0, 1.0 - 0.35 * dt)
+        self.alt += self.vy * dt
+        self.x += self.vx * dt
+        if abs(self.x) > 280.0:
+            self.x = math.copysign(280.0, self.x)
+            self.vx *= -0.25
+        if self.alt <= 0.0:
+            self.alt = 0.0
+            speed = abs(self.vy)
+            miss = abs(self.x)
+            if speed > 9.5 or miss > self.target_half + 16.0:
+                self.finish(False, 0, {"mode": "landing", "speed": speed,
+                                       "miss": miss, "fuel": self.fuel},
+                            "VEHICLE LOST")
+            else:
+                points = 10 if miss <= self.target_half * 0.35 else (7 if miss <= self.target_half else 4)
+                points += 10 if speed <= 3.0 else (7 if speed <= 5.0 else (4 if speed <= 7.5 else 2))
+                points += 10 if self.fuel >= 30.0 else (6 if self.fuel >= 15.0 else (3 if self.fuel > 0 else 0))
+                self.finish(True, min(30, points),
+                            {"mode": "landing", "speed": speed, "miss": miss,
+                             "fuel": self.fuel}, "TOUCHDOWN")
+        elif self.run_time > 45.0:
+            self.finish(False, 0, {"mode": "landing", "speed": abs(self.vy),
+                                   "miss": abs(self.x), "fuel": self.fuel},
+                        "VEHICLE LOST")
+
+    # -- debris profile ------------------------------------------------
+    def setup_debris(self):
+        self.max_hull = (4, 3, 2)[self.rank]
+        self.hull = self.max_hull
+        self.ship_x = 0.5
+        self.ship_vx = 0.0
+        self.spawn_timer = 0.5
+        self.spawn_interval = (0.72, 0.58, 0.46)[self.rank]
+        self.fall_speed = (0.20, 0.26, 0.32)[self.rank]
+        self.close_calls = 0
+        self.hit_cooldown = 0.0
+
+    def step_debris(self, dt):
+        self.run_time += dt
+        if self.keys["left"]:
+            self.ship_vx -= 1.7 * dt
+        if self.keys["right"]:
+            self.ship_vx += 1.7 * dt
+        self.ship_vx *= max(0.0, 1.0 - 2.0 * dt)
+        self.ship_x += self.ship_vx * dt
+        if self.ship_x < 0.07:
+            self.ship_x = 0.07
+            self.ship_vx = 0.0
+        elif self.ship_x > 0.93:
+            self.ship_x = 0.93
+            self.ship_vx = 0.0
+        self.spawn_timer -= dt
+        if self.spawn_timer <= 0:
+            self.spawn_debris()
+            self.spawn_timer = self.spawn_interval * random.uniform(0.78, 1.22)
+        self.hit_cooldown = max(0.0, self.hit_cooldown - dt)
+        for rock in list(self.debris):
+            rock["y"] += rock["vy"] * dt
+            rock["rot"] += rock["spin"] * dt
+            dx = (rock["x"] - self.ship_x) * 1.6
+            dy = rock["y"] - 0.88
+            if math.hypot(dx, dy) < rock["r"] + 0.05 and self.hit_cooldown <= 0:
+                self.debris.remove(rock)
+                self.hull -= 1
+                self.hit_cooldown = 0.6
+                self.shake = 8.0
+                self.flash = 0.25
+                self.spawn_burst(self.ship_x, 0.88, 12)
+                if self.hull <= 0:
+                    self.finish(False, 0, {"mode": "debris", "hull": 0,
+                                           "max_hull": self.max_hull,
+                                           "close": self.close_calls},
+                                "HULL BREACH")
+                    return
+                continue
+            if not rock.get("counted") and rock["y"] > 0.88 and abs(dx) < 0.16:
+                rock["counted"] = True
+                self.close_calls += 1
+            if rock["y"] > 1.1:
+                self.debris.remove(rock)
+        if self.run_time >= 20.0:
+            self.finish(True, min(30, self.hull * 7 + min(6, self.close_calls)),
+                        {"mode": "debris", "hull": self.hull,
+                         "max_hull": self.max_hull,
+                         "close": self.close_calls}, "JUMP POINT CLEARED")
+
+    def spawn_debris(self):
+        radius = random.uniform(0.012, 0.026)
+        self.debris.append({"x": random.uniform(0.08, 0.92), "y": -0.04,
+                            "vy": self.fall_speed * random.uniform(0.85, 1.25),
+                            "r": radius, "rot": random.uniform(0, 6.28),
+                            "spin": random.uniform(-2.2, 2.2),
+                            "c": random.choice((YELLOW, TEXT, MUTED)),
+                            "counted": False})
+
+    # -- rendering -----------------------------------------------------
+    def draw(self, _event=None):
+        c = self.canvas
+        w = c.winfo_width()
+        h = c.winfo_height()
+        c.delete("all")
+        if w < 120 or h < 120:
+            return
+        c.create_rectangle(0, 0, w, h, fill=BG, outline="")
+        drift = (self.elapsed * 0.004) % 1.0
+        for star in self.stars:
+            x = star["x"] * w
+            y = ((star["y"] + drift) % 1.0) * h
+            r = star["r"]
+            c.create_oval(x - r, y - r, x + r, y + r, fill=star["c"], outline="")
+        if self.mode == "load":
+            self.draw_load(c, w, h)
+        elif self.mode == "landing":
+            self.draw_landing(c, w, h)
+        else:
+            self.draw_debris(c, w, h)
+        self.draw_particles(c, w, h)
+        if self.phase == "countdown":
+            number = max(1, int(math.ceil(self.countdown)))
+            c.create_rectangle(w / 2 - 64, h / 2 - 74, w / 2 + 64, h / 2 + 66,
+                               fill=BG, outline=YELLOW)
+            c.create_text(w / 2, h / 2 - 14, text=str(number),
+                          fill=YELLOW, font=fnt(38, "bold", mono=True))
+            c.create_text(w / 2, h / 2 + 40, text=tracked("Flight controls"),
+                          fill=MUTED, font=fnt(8))
+        if self.phase == "ending" and self.result is not None:
+            colour = YELLOW if self.success else MUTED
+            c.create_rectangle(w * 0.22, h * 0.38, w * 0.78, h * 0.62,
+                               fill=BG, outline=colour)
+            c.create_text(w / 2, h * 0.45, text=tracked(self.result["title"]),
+                          fill=colour, font=fnt(15, "bold"))
+            c.create_text(w / 2, h * 0.53,
+                          text="PERFORMANCE +{0:02d} · DEBRIEF".format(self.bonus),
+                          fill=TEXT, font=fnt(8, mono=True))
+        if self.shake > 0.2:
+            c.move("all", random.uniform(-self.shake, self.shake),
+                   random.uniform(-self.shake, self.shake))
+        if self.flash > 0:
+            c.create_rectangle(2, 2, w - 2, h - 2, outline=YELLOW, width=2)
+
+    def draw_load(self, c, w, h):
+        top, bottom = h * 0.18, h * 0.82
+        tank_x = w * 0.14
+        tank_w = min(92, w * 0.11)
+        c.create_text(tank_x, top - 18, text="METHALOX TANK", anchor="w",
+                      fill=MUTED, font=fnt(8, mono=True))
+        c.create_rectangle(tank_x, top, tank_x + tank_w, bottom, outline=MUTED)
+        fill_y = bottom - (bottom - top) * (self.load / 100.0)
+        c.create_rectangle(tank_x + 2, fill_y, tank_x + tank_w - 2, bottom - 2,
+                           fill=YELLOW, outline="")
+        for i in range(1, 5):
+            y = top + (bottom - top) * i / 5.0
+            c.create_line(tank_x, y, tank_x + tank_w, y, fill=BG if y >= fill_y else MUTED)
+        c.create_text(tank_x + tank_w / 2, bottom - 14,
+                      text="{0:03.0f}% LOAD".format(self.load),
+                      fill=BG if self.load > 6 else YELLOW,
+                      font=fnt(9, "bold", mono=True))
+        gx = w * 0.50
+        c.create_text(gx, top - 18, text="MIXTURE VALVE", fill=MUTED, font=fnt(8, mono=True))
+        c.create_rectangle(gx - 24, top, gx + 24, bottom, outline=MUTED)
+        y_target = bottom - (bottom - top) * self.target / 100.0
+        y_hi = bottom - (bottom - top) * min(100.0, self.target + self.band) / 100.0
+        y_lo = bottom - (bottom - top) * max(0.0, self.target - self.band) / 100.0
+        c.create_rectangle(gx - 24, y_hi, gx + 24, y_lo, outline=YELLOW, dash=(2, 3))
+        y_mix = bottom - (bottom - top) * self.mix / 100.0
+        c.create_line(gx - 34, y_mix, gx + 34, y_mix, fill=YELLOW, width=2)
+        c.create_text(gx + 36, y_target, text="TARGET", anchor="w", fill=YELLOW,
+                      font=fnt(8, mono=True))
+        tx = w * 0.64
+        c.create_text(tx, top + 8, anchor="nw", text="MIXTURE  {0:03.0f}%".format(self.mix),
+                      fill=TEXT, font=fnt(10, mono=True))
+        c.create_text(tx, top + 34, anchor="nw", text="TARGET   {0:03.0f}%".format(self.target),
+                      fill=TEXT, font=fnt(10, mono=True))
+        stable = self.in_time / max(0.001, self.run_time) * 100.0
+        c.create_text(tx, top + 60, anchor="nw", text="STABILITY {0:03.0f}%".format(stable),
+                      fill=YELLOW, font=fnt(10, mono=True))
+        c.create_text(tx, top + 94, anchor="nw", text="BAND ±{0:.0f}% · {1}".format(
+            self.band, "TIBANNA METERED" if self.rank == 0 else "MANUAL TRIM"),
+            fill=MUTED, font=fnt(8, mono=True))
+        if self.strain > 0.05:
+            c.create_text(tx, top + 128, anchor="nw", text="INJECTOR STRAIN · {0:.1f}S".format(self.strain),
+                          fill=YELLOW, font=fnt(8, mono=True))
+        bar_y = h * 0.90
+        c.create_rectangle(w * 0.14, bar_y, w * 0.86, bar_y + 8, outline=MUTED)
+        c.create_rectangle(w * 0.14 + 2, bar_y + 2, w * 0.14 + 2 + (w * 0.72 - 4) * self.load / 100.0,
+                           bar_y + 6, fill=YELLOW, outline="")
+        c.create_text(w * 0.14, bar_y - 14, anchor="w", text="LOAD SEQUENCE",
+                      fill=MUTED, font=fnt(8, mono=True))
+
+    def draw_landing(self, c, w, h):
+        deck_y = h - 46.0
+        max_alt = self.alt_max
+        def alt_y(value):
+            value = max(0.0, min(max_alt, value))
+            return 42.0 + (1.0 - value / max_alt) * (deck_y - 42.0)
+        for tick in range(200, 801, 200):
+            y = alt_y(tick)
+            c.create_line(w * 0.06, y, w * 0.94, y, fill=MUTED, dash=(2, 6))
+            c.create_text(w * 0.06, y - 6, text="{0} M".format(tick), anchor="w",
+                          fill=MUTED, font=fnt(7, mono=True))
+        c.create_rectangle(0, h - 30, w, h, fill=BG, outline="")
+        for i in range(7):
+            x = w * (0.04 + i * 0.15)
+            c.create_line(x, h - 26, x + w * 0.09, h - 26, fill=MUTED)
+        deck_w = w * 0.46
+        deck_x = w / 2 - deck_w / 2
+        c.create_rectangle(deck_x, deck_y, deck_x + deck_w, deck_y + 16,
+                           fill=BG, outline=YELLOW)
+        c.create_line(deck_x, deck_y + 16, deck_x + 18, h - 12, fill=YELLOW)
+        c.create_line(deck_x + deck_w, deck_y + 16, deck_x + deck_w - 18, h - 12, fill=YELLOW)
+        half_px = self.target_half / 280.0 * w * 0.36
+        c.create_line(w / 2 - half_px, deck_y + 8, w / 2 + half_px, deck_y + 8,
+                      fill=YELLOW, width=2)
+        c.create_text(w / 2, deck_y - 10, text="TARGET", fill=MUTED, font=fnt(7, mono=True))
+        bx = w / 2 + (self.x / 280.0) * (w * 0.36)
+        bx = max(32, min(w - 32, bx))
+        by = deck_y - 16 if (self.alt <= 0 and self.success) else alt_y(self.alt)
+        if not (self.phase == "ending" and not self.success):
+            c.create_line(bx, by - 16, bx, by + 8, fill=YELLOW, width=2)
+            c.create_polygon(bx - 6, by + 8, bx, by + 22, bx + 6, by + 8,
+                             fill="", outline=YELLOW)
+            c.create_line(bx - 7, by + 8, bx - 17, by + 18, fill=YELLOW)
+            c.create_line(bx + 7, by + 8, bx + 17, by + 18, fill=YELLOW)
+        if self.burning and self.phase == "flying":
+            length = random.randint(18, 42)
+            c.create_polygon(bx - 5, by + 20, bx, by + 20 + length, bx + 5, by + 20,
+                             fill=YELLOW, outline="")
+        c.create_line(bx, deck_y, bx, h - 12, fill=MUTED, dash=(2, 5))
+        wind = self.wind_strength * math.sin(self.run_time * 0.85 + 0.5)
+        for i in range(3):
+            y = 54 + i * 14
+            length = 10 + abs(wind) * 8
+            c.create_line(w - 34, y, w - 34 - length, y, fill=MUTED)
+            c.create_line(w - 34 - length, y, w - 40 - length, y - 3, fill=MUTED)
+        c.create_text(w - 14, 18, anchor="ne", text="WIND {0:+.1f}".format(wind),
+                      fill=MUTED, font=fnt(8, mono=True))
+        c.create_text(14, 18, anchor="nw", text="ALT {0:04.0f} M".format(self.alt),
+                      fill=TEXT, font=fnt(10, "bold", mono=True))
+        c.create_text(14, 38, anchor="nw", text="V/S {0:+05.1f} M/S".format(self.vy),
+                      fill=YELLOW, font=fnt(9, mono=True))
+        c.create_text(14, 56, anchor="nw", text="FUEL {0:03.0f}%".format(self.fuel),
+                      fill=MUTED, font=fnt(9, mono=True))
+        c.create_rectangle(w * 0.72, h - 22, w * 0.96, h - 16, outline=MUTED)
+        c.create_rectangle(w * 0.72 + 1, h - 21, w * 0.72 + 1 + (w * 0.24 - 2) * self.fuel / 100.0,
+                           h - 17, fill=YELLOW, outline="")
+
+    def draw_debris(self, c, w, h):
+        for i in range(18):
+            x = (i * 173 % 997) / 997.0 * w
+            y = ((i * 311 + int(self.elapsed * 140)) % 997) / 997.0 * h
+            c.create_line(x, y, x, y + 8, fill=MUTED)
+        for rock in self.debris:
+            x, y = rock["x"] * w, rock["y"] * h
+            r = rock["r"] * min(w, h)
+            points = []
+            for i in range(6):
+                angle = rock["rot"] + i * math.pi / 3.0
+                points.extend([x + r * math.cos(angle), y + r * math.sin(angle)])
+            c.create_polygon(points, outline=rock["c"], fill="")
+        sx, sy = self.ship_x * w, h - 62
+        c.create_line(sx - 28, sy, sx - 8, sy - 6, fill=YELLOW, width=2)
+        c.create_line(sx + 28, sy, sx + 8, sy - 6, fill=YELLOW, width=2)
+        c.create_line(sx - 8, sy - 6, sx + 8, sy - 6, fill=YELLOW, width=2)
+        c.create_polygon(sx, sy - 16, sx + 5, sy - 4, sx + 5, sy + 8, sx - 5, sy + 8,
+                         sx - 5, sy - 4, fill="", outline=YELLOW)
+        c.create_line(sx - 4, sy + 8, sx - 8, sy + 18, fill=YELLOW)
+        c.create_line(sx + 4, sy + 8, sx + 8, sy + 18, fill=YELLOW)
+        if self.hull > 0:
+            c.create_arc(sx - 40, sy - 32, sx + 40, sy + 26, start=205, extent=130,
+                         style="arc", outline=YELLOW)
+            c.create_arc(sx - 52, sy - 42, sx + 52, sy + 36, start=215, extent=110,
+                         style="arc", outline=MUTED, dash=(3, 4))
+        c.create_text(14, 18, anchor="nw", text="HULL", fill=MUTED, font=fnt(8, mono=True))
+        for i in range(self.max_hull):
+            x = 54 + i * 15
+            c.create_rectangle(x, 18, x + 10, 26,
+                               fill=YELLOW if i < self.hull else BG, outline=MUTED)
+        c.create_text(w - 14, 18, anchor="ne", text="{0:04.1f}S".format(max(0.0, 20.0 - self.run_time)),
+                      fill=YELLOW, font=fnt(10, "bold", mono=True))
+        c.create_text(w - 14, 38, anchor="ne", text="CLOSE CALLS {0}".format(self.close_calls),
+                      fill=MUTED, font=fnt(8, mono=True))
+
+
+class OutcomeScreen(Screen):
+    def __init__(self, parent, app, index, option, record):
+        Screen.__init__(self, parent, app)
+        self.index = index
+        self.option = option
+        self.record = record
+        holder = tk.Frame(self, bg=BG)
+        holder.pack(fill="both", expand=True)
+        self.card = tk.Frame(holder, bg=BG, highlightthickness=1,
+                             highlightbackground=YELLOW)
+        self.card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.86)
+        inner = tk.Frame(self.card, bg=BG)
+        inner.pack(fill="both", expand=True, padx=26, pady=22)
+        head = tk.Frame(inner, bg=BG)
+        head.pack(fill="x")
+        tk.Label(head, text="MISSION {0:02d} · DEBRIEF".format(index + 1),
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w").pack(side="left")
+        tk.Label(head, text="EXECUTION " + ("SUCCESS" if record["success"] else "FAILED"),
+                 font=fnt(8, "bold", mono=True), bg=BG,
+                 fg=YELLOW if record["success"] else MUTED).pack(side="right")
+        tk.Label(inner, text=tracked(option["verdict"]), font=fnt(16, "bold"),
+                 bg=BG, fg=verdict_colour(option["verdict"]),
+                 anchor="w").pack(fill="x", pady=(8, 2))
+        tk.Label(inner, text="DECISION · " + option["label"],
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w",
+                 justify="left", wraplength=560).pack(fill="x")
+        tk.Frame(inner, bg=MUTED, height=1).pack(fill="x", pady=12)
+        self.explanation = tk.Label(inner, text=option["text"], font=fnt(10), bg=BG,
+                                    fg=TEXT, anchor="w", justify="left", wraplength=620)
+        self.explanation.pack(fill="x")
+        panel = tk.Frame(inner, bg=BG, highlightthickness=1, highlightbackground=MUTED)
+        panel.pack(fill="x", pady=(14, 0))
+        pin = tk.Frame(panel, bg=BG)
+        pin.pack(fill="x", padx=16, pady=10)
+        pin_head = tk.Frame(pin, bg=BG)
+        pin_head.pack(fill="x")
+        tk.Label(pin_head, text="LIVE FLIGHT · " + record["flight_title"],
+                 font=fnt(8, "bold", mono=True), bg=BG, fg=TEXT,
+                 anchor="w").pack(side="left")
+        tk.Label(pin_head, text="+{0:02d} PERFORMANCE".format(record["bonus"]),
+                 font=fnt(8, mono=True), bg=BG, fg=YELLOW,
+                 anchor="e").pack(side="right")
+        self.stats = tk.Label(pin, text=self.stats_text(record["stats"], record["success"]),
+                              font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                              anchor="w", justify="left", wraplength=600)
+        self.stats.pack(fill="x", pady=(6, 0))
+        bottom = tk.Frame(inner, bg=BG)
+        bottom.pack(fill="x", pady=(16, 0))
+        left = tk.Frame(bottom, bg=BG)
+        left.pack(side="left")
+        tk.Label(left, text="DECISION {0:+d} · FLIGHT {1:+d}".format(
+            record["option_points"], record["bonus"]), font=fnt(8, mono=True),
+            bg=BG, fg=MUTED, anchor="w").pack(anchor="w")
+        tk.Label(left, text="{0:+d} PTS".format(record["points"]),
+                 font=fnt(20, "bold", mono=True), bg=BG,
+                 fg=YELLOW if record["points"] > 0 else MUTED).pack(anchor="w")
+        FlatButton(bottom, app, "CONTINUE", self.g(app.advance), "primary",
+                   size=10, padx=18, pady=8).pack(side="right")
+
+        def wrap(event):
+            width = max(260, event.width - 56)
+            self.explanation.configure(wraplength=width)
+            self.stats.configure(wraplength=width)
+        self.card.bind("<Configure>", self.g(wrap))
+
+    @staticmethod
+    def stats_text(stats, success=True):
+        mode = stats.get("mode")
+        if mode == "load":
+            return "STABILITY {0:.0f}% · LOAD {1:.0f}% · NO NETWORK".format(
+                stats.get("stability", 0), stats.get("load", 0))
+        if mode == "landing":
+            return "{0} {1:.1f} M/S · MISS {2:.1f} M · FUEL {3:.0f}%".format(
+                "TOUCHDOWN" if success else "IMPACT", stats.get("speed", 0),
+                stats.get("miss", 0), stats.get("fuel", 0))
+        return "HULL {0}/{1} · CLOSE CALLS {2} · BESKAR ONLINE".format(
+            stats.get("hull", 0), stats.get("max_hull", 0), stats.get("close", 0))
+
+
 class FinalScreen(Screen):
     def __init__(self, parent, app):
         Screen.__init__(self, parent, app)
@@ -895,6 +1611,12 @@ class FinalScreen(Screen):
                  bg=BG, fg=YELLOW).pack(pady=(6, 2))
         tk.Label(self.card, text="CALLSIGN · " + app.callsign,
                  font=fnt(9, mono=True), bg=BG, fg=MUTED).pack()
+        if app.last_run_improved:
+            record_text = "NEW PERSONAL BEST · SAVED LOCALLY"
+        else:
+            record_text = "PERSONAL BEST · {0:03d}".format(app.pilot.best_score)
+        tk.Label(self.card, text=record_text, font=fnt(8, mono=True), bg=BG,
+                 fg=YELLOW if app.last_run_improved else MUTED).pack(pady=(4, 0))
 
         tk.Label(self.card, text=tracked("Total score"), font=fnt(8),
                  bg=BG, fg=MUTED).pack(pady=(12, 0))
@@ -996,7 +1718,11 @@ class FinalScreen(Screen):
 
 
 class App:
-    def __init__(self, root):
+    KEY_MAP = {"Up": "up", "Down": "down", "Left": "left", "Right": "right",
+               "space": "space", "w": "up", "a": "left", "s": "down",
+               "d": "right", "p": "pause", "Escape": "pause"}
+
+    def __init__(self, root, pilot=None):
         self.root = root
         self.after_ids = set()
         self.error_panel = None
@@ -1006,6 +1732,12 @@ class App:
         self.results = []
         self.mission_index = 0
         self.callsign = ""
+        self.pilot = pilot or PilotStore()
+        self.pending_index = 0
+        self.pending_option = None
+        self.recorded = False
+        self.last_run_improved = False
+        self.fullscreen = False
 
         root.configure(bg=BG)
         root.protocol("WM_DELETE_WINDOW", self.guard(self.close))
@@ -1022,6 +1754,9 @@ class App:
         for digit in ("1", "2", "3"):
             root.bind("<KeyPress-{0}>".format(digit),
                       self.guard(lambda event, d=digit: self.dispatch_digit(d)))
+        root.bind("<KeyPress>", self.guard(self.on_key_press), add="+")
+        root.bind("<KeyRelease>", self.guard(self.on_key_release), add="+")
+        root.bind("<F11>", self.guard(self.toggle_fullscreen), add="+")
 
         self.show_title()
 
@@ -1088,26 +1823,96 @@ class App:
         self.score = 0
         self.results = []
         self.mission_index = 0
+        self.pending_option = None
+        self.recorded = False
+        self.last_run_improved = False
         self.show_mission(0)
+
+    def begin_flight(self, index, option):
+        self.pending_index = index
+        self.pending_option = option
+        self.mission_index = index
+        self.show(lambda parent, app: FlightScreen(parent, app, index, option))
+
+    def complete_flight(self, index, option, result):
+        if option is None or result is None:
+            return
+        record = {"mission": index, "label": option["label"],
+                  "option_points": option["points"], "bonus": result["bonus"],
+                  "points": option["points"] + result["bonus"],
+                  "verdict": option["verdict"], "success": result["success"],
+                  "flight_title": result["title"], "stats": result["stats"]}
+        self.score += record["points"]
+        self.results.append(record)
+        self.pending_option = None
+        self.pending_index = index
+        self.show(lambda parent, app: OutcomeScreen(parent, app, index, option, record))
+
+    def finish_run(self):
+        if not self.recorded:
+            self.recorded = True
+            self.last_run_improved = self.pilot.record(
+                self.score, self.callsign, rank_for(self.score))
+        self.show(lambda parent, app: FinalScreen(parent, app))
 
     def advance(self):
         next_index = self.mission_index + 1
         if next_index < len(MISSIONS):
             self.show_mission(next_index)
         else:
-            self.show(lambda parent, app: FinalScreen(parent, app))
+            self.finish_run()
 
     def start_over(self):
-        self.score = 0
-        self.results = []
-        self.mission_index = 0
-        self.show_title()
+        self.back_to_title()
 
     def back_to_title(self):
         self.score = 0
         self.results = []
         self.mission_index = 0
+        self.pending_option = None
+        self.recorded = False
+        self.last_run_improved = False
         self.show_title()
+
+    def abort_flight(self):
+        self.back_to_title()
+
+    def on_key_press(self, event):
+        if self.error_panel is not None:
+            return
+        screen = self.current
+        if screen is None:
+            return
+        handler = getattr(screen, "on_key", None)
+        if not callable(handler):
+            return
+        key = self.KEY_MAP.get(event.keysym)
+        if key is None:
+            key = self.KEY_MAP.get(event.keysym.lower())
+        if key is not None:
+            handler(key, True)
+
+    def on_key_release(self, event):
+        if self.error_panel is not None:
+            return
+        screen = self.current
+        if screen is None:
+            return
+        handler = getattr(screen, "on_key", None)
+        if not callable(handler):
+            return
+        key = self.KEY_MAP.get(event.keysym)
+        if key is None:
+            key = self.KEY_MAP.get(event.keysym.lower())
+        if key is not None and key != "pause":
+            handler(key, False)
+
+    def toggle_fullscreen(self, _event=None):
+        try:
+            self.fullscreen = not self.fullscreen
+            self.root.attributes("-fullscreen", self.fullscreen)
+        except Exception:
+            self.fullscreen = False
 
     def dispatch_digit(self, digit):
         if self.error_panel is not None:

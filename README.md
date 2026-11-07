@@ -1,6 +1,6 @@
-# The Interstellar Driver's Ed
+# Rebel-SpaceX Flight Simulator
 
-**Rebel-SpaceX Flight Simulator** — a windowed desktop game built for MLH Hack Week. Three branching missions in a restrained Star Wars cockpit, with the engineering decisions borrowed from SpaceX: a methalox propellant load, an autonomous hoverslam onto a drone ship, and a heat-shield-versus-mass trade-off.
+**The Interstellar Driver's Ed** — a windowed desktop game built for MLH Hack Week. Three branching missions in a restrained Star Wars cockpit, with the engineering decisions borrowed from SpaceX: a methalox propellant load, an autonomous hoverslam onto a drone ship, and a heat-shield-versus-mass trade-off.
 
 The app is a single Tkinter file and uses only the Python standard library. The sponsor integrations are simulated locally; nothing leaves the machine.
 

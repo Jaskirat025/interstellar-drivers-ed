@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>The Interstellar Driver's Ed · Rebel-SpaceX Flight Simulator</title>
-  <meta name="description" content="A playable Star Wars-inspired SpaceX flight simulator for the desktop, built for MLH Hack Week: balance a methalox load, fly a hoverslam and survive a debris run. Windows, macOS, no dependencies.">
+  <title>Rebel Aerospace Archive · SpaceX × Star Wars</title>
+  <meta name="description" content="An independent visual archive of SpaceX Falcon 9 and Crew Dragon hardware, read through a Star Wars lens: eight NASA photographs, two silent launch films, and a scroll-driven flight profile. The playable simulator is a separate desktop app.">
   <style>
     :root{--bg:#000000;--yellow:#FFE81F;--muted:#8B96A3;--text:#C9D1D9;--sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
     *,*::before,*::after{box-sizing:border-box}
@@ -185,237 +185,274 @@
     @media (max-width:720px){.nav__links{display:none}.menu-link{display:none}.hero{min-height:auto;padding-top:4rem}.section{padding-block:2.6rem}.archive-grid{grid-template-columns:1fr;grid-auto-rows:auto}.photo,.photo--wide{grid-column:1;grid-row:auto;min-height:13rem}.photo--tall{grid-column:1;grid-row:auto;min-height:19rem}.photo-note{grid-column:1;min-height:12rem}.stats__grid{grid-template-columns:1fr 1fr}.stat:nth-child(3),.stat:nth-child(4){border-top:1px solid var(--muted)}.stat:nth-child(3){border-left:0;padding-left:0}.stat{padding-block:.8rem}}
     @media (max-width:640px){.nav{gap:.35rem}.brand{font-size:.55rem;letter-spacing:.12em}.nav-action{font-size:.52rem;letter-spacing:.05em;padding:.45rem .5rem}.actions .btn{flex:1 1 100%}.hud__grid{grid-template-columns:1fr 1fr}.mission-slide p{min-height:0}.slider__count{font-size:.58rem}.photo__caption{flex-direction:column;align-items:flex-start;gap:.15rem}.photo__caption small{text-align:left;white-space:normal}.photo-dialog__bar{align-items:flex-start}.launch__readout{grid-template-columns:1fr}}
     @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.stars__drift,.stars circle,.hud__scan,.hud__dot,.ticker__track,.booster-loop,.launch-flame,.landing-ping,.launch__bar i{animation:none}.tile,.btn,.nav-action,.slider-btn,.mission-slide,.photo img{transition:none}.reveal-ready [data-reveal]{opacity:1;transform:none;transition:none}}
+    /* Cinematic archive pass */
+    .nav__toggle{display:none;border:1px solid var(--muted);background:transparent;color:var(--text);padding:.5rem .65rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+    .nav__toggle:hover{background:var(--yellow);border-color:var(--yellow);color:var(--bg)}
+    .orbit{position:relative;min-width:0;border:1px solid var(--muted);padding:1rem;background:var(--bg);overflow:hidden}
+    .orbit::before,.orbit::after{content:"";position:absolute;width:.55rem;height:.55rem;border-color:var(--yellow);border-style:solid;pointer-events:none}
+    .orbit::before{left:.35rem;top:.35rem;border-width:1px 0 0 1px}
+    .orbit::after{right:.35rem;bottom:.35rem;border-width:0 1px 1px 0}
+    .orbit__head{display:flex;align-items:center;justify-content:space-between;gap:.8rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--muted);padding-bottom:.55rem}
+    .orbit__head span:last-child{color:var(--yellow)}
+    .orbit svg{display:block;width:100%;height:auto;margin:.45rem 0 .2rem}
+    .orbit__rings{transform-box:view-box;transform-origin:210px 170px;animation:orbitSpin 90s linear infinite}
+    @keyframes orbitSpin{to{transform:rotate(360deg)}}
+    .orbit__legend{display:grid;grid-template-columns:1fr 1fr;gap:.4rem .8rem;border-top:1px solid var(--muted);padding-top:.65rem}
+    .orbit__legend span{display:block;font-family:var(--mono);font-size:.5rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .orbit__legend b{display:block;margin-top:.1rem;font-family:var(--mono);font-size:.66rem;letter-spacing:.04em;color:var(--text);font-weight:600}
+    .orbit__note{margin-top:.8rem;font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+    .films{display:grid;gap:1.2rem;margin-top:1.6rem}
+    .film{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(15rem,.58fr);border:1px solid var(--muted);background:var(--bg);overflow:hidden}
+    .film:nth-child(even){grid-template-columns:minmax(15rem,.58fr) minmax(0,1.42fr)}
+    .film__media{position:relative;min-width:0;border-right:1px solid var(--muted);background:var(--bg)}
+    .film:nth-child(even) .film__media{order:2;border-right:0;border-left:1px solid var(--muted)}
+    .film video{display:block;width:100%;height:100%;min-height:18rem;aspect-ratio:16/9;object-fit:cover;background:var(--bg);filter:contrast(1.03)}
+    .film__stamp{position:absolute;left:.8rem;top:.8rem;z-index:1;border:1px solid var(--yellow);background:var(--bg);color:var(--yellow);font-family:var(--mono);font-size:.52rem;letter-spacing:.12em;text-transform:uppercase;padding:.2rem .4rem;pointer-events:none}
+    .film__copy{display:flex;flex-direction:column;justify-content:center;padding:clamp(1.2rem,3vw,2rem);min-width:0}
+    .film__copy h3{margin-top:.55rem;font-size:clamp(1.05rem,2vw,1.4rem)}
+    .film__copy p{margin-top:.7rem;font-size:.87rem;color:var(--muted)}
+    .film__data{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .8rem;margin:1rem 0 0;padding-top:.8rem;border-top:1px solid var(--muted);font-family:var(--mono);font-size:.55rem;letter-spacing:.08em;text-transform:uppercase}
+    .film__data dt{color:var(--muted)}
+    .film__data dd{margin:0;color:var(--yellow)}
+    .film__credit{margin-top:1rem;font-family:var(--mono);font-size:.54rem;line-height:1.6;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .film__link{display:inline-block;margin-top:1rem;font-family:var(--mono);font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text);text-decoration:none;border-bottom:1px solid var(--muted);padding-bottom:2px;align-self:flex-start}
+    .film__link:hover{color:var(--yellow);border-color:var(--yellow)}
+    .sequence{display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);gap:clamp(2rem,6vw,5rem);align-items:start}
+    .sequence__aside{position:sticky;top:6rem}
+    .sequence__meter{position:relative;width:2px;height:10rem;margin-top:1.4rem;background:var(--muted);overflow:hidden}
+    .sequence__meter i{display:block;width:100%;height:0;background:var(--yellow)}
+    .sequence__label{margin-top:.8rem;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--yellow)}
+    .sequence__list{list-style:none;margin:0;padding:0}
+    .sequence__step{border-top:1px solid var(--muted);padding:1.3rem 0 2rem;transition:opacity .3s ease}
+    .sequence__step:last-child{border-bottom:1px solid var(--muted)}
+    .sequence__step:not(.is-current){opacity:.66}
+    .sequence__step.is-current{opacity:1}
+    .step__index{display:flex;align-items:center;justify-content:space-between;gap:1rem;font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    .step__index b{color:var(--yellow);font-weight:600}
+    .sequence__step h3{margin-top:.7rem;font-size:clamp(1.5rem,3.4vw,2.3rem);letter-spacing:.04em}
+    .sequence__step p{margin-top:.65rem;max-width:38rem;font-size:.9rem;color:var(--muted)}
+    .step__data{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .8rem;margin:1rem 0 0;font-family:var(--mono);font-size:.55rem;letter-spacing:.08em;text-transform:uppercase}
+    .step__data dt{color:var(--muted)}
+    .step__data dd{margin:0;color:var(--text)}
+    .photo img{transform:translate3d(var(--tx,0px),var(--ty,0px),0) scale(1.035);transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+    .photo:hover img,.photo:focus-within img{transform:translate3d(var(--tx,0px),var(--ty,0px),0) scale(1.075)}
+    .photo--focus img{object-position:center 60%}
+    .simulator{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(15rem,.85fr);gap:clamp(1.4rem,4vw,3rem);align-items:center;border:1px solid var(--yellow);padding:clamp(1.3rem,4vw,2.2rem)}
+    .simulator h2{font-size:clamp(1.3rem,3vw,1.9rem)}
+    .simulator p{margin-top:.8rem;font-size:.9rem;color:var(--muted)}
+    .simulator__links{display:grid;gap:.65rem}
+    .simulator__links .btn{width:100%}
+    .simulator__note{margin-top:1rem;font-family:var(--mono);font-size:.55rem;line-height:1.6;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    .film-credit{margin-top:1.2rem;max-width:58rem;font-size:.76rem;color:var(--muted)}
+    @media (max-width:900px){
+      .film,.film:nth-child(even){grid-template-columns:1fr}
+      .film__media,.film:nth-child(even) .film__media{order:0;border-left:0;border-right:0;border-bottom:1px solid var(--muted)}
+      .film video{min-height:0}
+      .sequence{grid-template-columns:1fr}
+      .sequence__aside{position:static}
+      .sequence__meter{height:6rem}
+      .simulator{grid-template-columns:1fr}
+    }
+    @media (max-width:720px){
+      .nav__toggle{display:inline-flex}
+      .nav__links{display:none;position:absolute;left:0;right:0;top:100%;flex-direction:column;align-items:stretch;gap:0;background:var(--bg);border-bottom:1px solid var(--muted);padding:.35rem 1.25rem .9rem}
+      .nav__links.is-open{display:flex}
+      .nav__link{padding:.65rem 0;font-size:.66rem}
+      .orbit{max-width:34rem}
+      .film__copy{padding:1.1rem}
+      .film__data,.step__data{grid-template-columns:1fr 1fr}
+      .film video{aspect-ratio:16/9}
+    }
+    @media (max-width:640px){
+      .orbit__legend{grid-template-columns:1fr 1fr}
+      .film__data{grid-template-columns:1fr}
+      .sequence__step{padding-bottom:1.6rem}
+    }
+    @media (prefers-reduced-motion:reduce){
+      .orbit__rings{animation:none}
+      .photo img,.photo:hover img,.photo:focus-within img{transition:none}
+      .sequence__step{transition:none}
+    }
+
   </style>
   <script>document.documentElement.classList.add("js");</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
-<svg class="stars" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
-  <g class="stars__drift">
-    <circle cx="80" cy="70" r="1.2" fill="#8B96A3"/><circle cx="240" cy="140" r="1" fill="#C9D1D9"/><circle cx="420" cy="60" r="1.6" fill="#8B96A3"/><circle cx="610" cy="120" r="1" fill="#8B96A3"/><circle cx="780" cy="80" r="1.3" fill="#C9D1D9"/><circle cx="960" cy="150" r="1" fill="#8B96A3"/><circle cx="1120" cy="60" r="1.5" fill="#8B96A3"/><circle cx="1300" cy="110" r="1" fill="#C9D1D9"/><circle cx="1470" cy="70" r="1.2" fill="#8B96A3"/>
-    <circle cx="120" cy="260" r="1" fill="#C9D1D9"/><circle cx="330" cy="310" r="1.4" fill="#8B96A3"/><circle cx="520" cy="240" r="1" fill="#8B96A3"/><circle cx="700" cy="330" r="1.2" fill="#C9D1D9"/><circle cx="900" cy="270" r="1" fill="#8B96A3"/><circle cx="1080" cy="340" r="1.5" fill="#8B96A3"/><circle cx="1260" cy="250" r="1" fill="#C9D1D9"/><circle cx="1430" cy="320" r="1.2" fill="#8B96A3"/>
-    <circle cx="60" cy="520" r="1.3" fill="#8B96A3"/><circle cx="260" cy="470" r="1" fill="#C9D1D9"/><circle cx="450" cy="560" r="1.5" fill="#8B96A3"/><circle cx="640" cy="490" r="1" fill="#8B96A3"/><circle cx="830" cy="580" r="1.2" fill="#C9D1D9"/><circle cx="1010" cy="500" r="1" fill="#8B96A3"/><circle cx="1190" cy="560" r="1.4" fill="#8B96A3"/><circle cx="1370" cy="480" r="1" fill="#C9D1D9"/><circle cx="1540" cy="540" r="1.2" fill="#8B96A3"/>
-    <circle cx="150" cy="700" r="1" fill="#8B96A3"/><circle cx="350" cy="760" r="1.3" fill="#C9D1D9"/><circle cx="540" cy="690" r="1" fill="#8B96A3"/><circle cx="730" cy="780" r="1.5" fill="#8B96A3"/><circle cx="920" cy="710" r="1" fill="#C9D1D9"/><circle cx="1110" cy="790" r="1.2" fill="#8B96A3"/><circle cx="1290" cy="700" r="1" fill="#8B96A3"/><circle cx="1460" cy="770" r="1.4" fill="#C9D1D9"/><circle cx="200" cy="850" r="1" fill="#8B96A3"/><circle cx="640" cy="840" r="1.2" fill="#8B96A3"/>
-  </g>
-</svg>
+<canvas class="stars" id="starfield" aria-hidden="true"></canvas>
 
 <nav class="nav" aria-label="Primary">
-  <a class="brand" href="#top">Rebel Aerospace Academy</a>
-  <div class="nav__links">
-    <a class="nav__link" href="#missions">Missions</a>
-    <a class="nav__link" href="#flight">Flight deck</a>
+  <a class="brand" href="#top">Rebel Aerospace Archive</a>
+  <button class="nav__toggle" id="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button>
+  <div class="nav__links" id="nav-links">
+    <a class="nav__link" href="#films">Films</a>
+    <a class="nav__link" href="#sequence">Flight profile</a>
     <a class="nav__link" href="#archive">Archive</a>
-    <a class="nav__link" href="#download">Download</a>
-    <button class="nav-action" id="auth-toggle" type="button" aria-expanded="false" aria-controls="auth-note">Access the Jedi Files · Auth0</button>
+    <a class="nav__link" href="#simulator">Simulator</a>
   </div>
 </nav>
 
 <main id="main">
-  <section class="hero wrap" id="top">
+    <section class="hero wrap" id="top">
     <div class="hero__grid">
       <div>
-        <p class="eyebrow" data-reveal>Rebel Aerospace Academy presents</p>
+        <p class="eyebrow" data-reveal>Rebel Aerospace Archive · MLH Hack Week</p>
         <h1 data-reveal style="--delay:.08s">The Interstellar Driver's Ed</h1>
-        <p class="subtitle" data-reveal style="--delay:.16s">Rebel-SpaceX Flight Simulator</p>
-        <p class="lede" data-reveal style="--delay:.24s">Fly the mission, don't just pick it. Balance a methalox load, land a booster on a Kamino drone ship, and steer an X-wing through a debris field. SpaceX engineering, Star Wars decisions, one local pilot record.</p>
+        <p class="subtitle" data-reveal style="--delay:.16s">SpaceX engineering · Star Wars imagination</p>
+        <p class="lede" data-reveal style="--delay:.24s">A visual flight log for the real Falcon 9 and Crew Dragon, read through a Rebellion lens. This page is the archive: eight NASA frames, two silent launch films and one orbital plot. The playable simulator is a separate desktop build.</p>
         <div class="actions" data-reveal style="--delay:.32s">
-          <a class="btn btn--primary" href="#download">Download v1.1.0</a>
-          <a class="btn" href="#flight">Enter the flight deck</a>
-          <a class="btn" href="simulator.py">View source (.py)</a>
+          <a class="btn btn--primary" href="#films">Watch the films</a>
+          <a class="btn" href="#archive">Open the archive</a>
         </div>
-        <p class="meta" data-reveal style="--delay:.4s">MLH Hack Week · Windows · macOS · Python 3.8+ · MIT</p>
-        <div class="auth-note" id="auth-note" role="status" aria-live="polite" tabindex="-1" hidden>
-          <strong>Demo only</strong>
-          Authentication runs as a local simulation inside the desktop app. No request is sent, no account is created and no data is collected.
-        </div>
+        <p class="meta" data-reveal style="--delay:.4s">8 NASA frames · 2 silent films · 0 external requests</p>
       </div>
-      <aside class="hud" data-reveal style="--delay:.18s" aria-label="Example flight telemetry">
-        <span class="hud__scan" aria-hidden="true"></span>
-        <div class="hud__top"><span class="hud__live"><span class="hud__dot"></span>Flight deck · live preview</span><span>T+00:42</span></div>
-        <div class="hud__row"><span>Altitude</span><strong>428 M</strong></div>
-        <div class="meter"><i style="width:52%"></i></div>
-        <div class="hud__row"><span>Descent rate</span><strong>-12.4 M/S</strong></div>
-        <div class="meter"><i style="width:34%"></i></div>
-        <div class="hud__row"><span>Landing fuel</span><strong>61%</strong></div>
-        <div class="meter"><i style="width:61%"></i></div>
-        <div class="hud__grid">
-          <div><span>Target</span><b>DRONE SHIP</b></div>
-          <div><span>Wind</span><b>-1.8 M/S</b></div>
-          <div><span>Mode</span><b>HOVERSLAM</b></div>
+      <aside class="orbit" data-reveal style="--delay:.18s" aria-label="Decorative orbital plot of a Dragon flight">
+        <div class="orbit__head"><span>Orbital plot</span><span>39A / LEO</span></div>
+        <svg id="orbit-map" viewBox="0 0 420 340" aria-hidden="true" focusable="false">
+          <g stroke="#8B96A3" stroke-opacity=".2" stroke-width="1">
+            <path d="M40 60H380M40 110H380M40 160H380M40 210H380M40 260H380"/>
+            <path d="M90 30V310M170 30V310M250 30V310M330 30V310"/>
+          </g>
+          <g class="orbit__rings" fill="none" stroke="#8B96A3">
+            <ellipse cx="210" cy="170" rx="150" ry="78" stroke-width="1"/>
+            <ellipse cx="210" cy="170" rx="112" ry="52" stroke-width="1" stroke-dasharray="2 7"/>
+            <ellipse cx="210" cy="170" rx="70" ry="26" stroke-width="1" stroke-dasharray="1 5"/>
+          </g>
+          <path d="M210 72V268M110 170H310" stroke="#8B96A3" stroke-opacity=".45" stroke-width="1" stroke-dasharray="2 6"/>
+          <circle cx="210" cy="170" r="4" fill="#FFE81F"/>
+          <circle cx="210" cy="170" r="13" fill="none" stroke="#FFE81F" stroke-opacity=".65"/>
+          <g fill="none" stroke="#FFE81F">
+            <path d="M60 170H72M348 170H360M210 80V92M210 248V260" stroke-width="1.2"/>
+          </g>
+          <g class="orbit__craft" fill="#FFE81F">
+            <path d="M0 -8L5 5L0 2L-5 5Z"/>
+            <animateMotion dur="16s" repeatCount="indefinite" rotate="auto" path="M60,170 A150,78 0 1,1 360,170 A150,78 0 1,1 60,170"/>
+          </g>
+          <text x="56" y="154" fill="#8B96A3" font-size="8" font-family="monospace" letter-spacing="1.5">KAMINO</text>
+          <text x="327" y="198" fill="#8B96A3" font-size="8" font-family="monospace" letter-spacing="1.5">LZ-40</text>
+          <text x="220" y="166" fill="#C9D1D9" font-size="9" font-family="monospace" letter-spacing="1.4">DRAGON</text>
+          <text x="220" y="178" fill="#8B96A3" font-size="7" font-family="monospace" letter-spacing="1.2">LEO / 51.6°</text>
+        </svg>
+        <div class="orbit__legend">
+          <div><span>Vehicle</span><b>Crew Dragon</b></div>
+          <div><span>Launcher</span><b>Falcon 9</b></div>
+          <div><span>Profile</span><b>Hoverslam</b></div>
+          <div><span>Archive</span><b>NASA / JSC</b></div>
         </div>
-        <p class="hud__note">Simulated telemetry · no network connection</p>
+        <p class="orbit__note">Decorative plot · not telemetry</p>
       </aside>
     </div>
   </section>
 
   <div class="ticker" aria-hidden="true">
     <div class="ticker__track">
-      <div class="ticker__group"><span>M01 · METHALOX LOAD</span><span>M02 · HOVERSLAM</span><span>M03 · DEBRIS RUN</span><span>LOCAL PILOT RECORD</span><span>NO NETWORK</span><span>WINDOWS + MACOS</span><span>NASA VISUAL ARCHIVE</span></div>
-      <div class="ticker__group"><span>M01 · METHALOX LOAD</span><span>M02 · HOVERSLAM</span><span>M03 · DEBRIS RUN</span><span>LOCAL PILOT RECORD</span><span>NO NETWORK</span><span>WINDOWS + MACOS</span><span>NASA VISUAL ARCHIVE</span></div>
+      <div class="ticker__group"><span>FALCON 9</span><span>CREW DRAGON</span><span>HOVERSLAM</span><span>NASA ARCHIVE</span><span>SILENT FILMS</span><span>NO EMBEDDED GAME</span><span>REBEL PAINT</span></div>
+      <div class="ticker__group"><span>FALCON 9</span><span>CREW DRAGON</span><span>HOVERSLAM</span><span>NASA ARCHIVE</span><span>SILENT FILMS</span><span>NO EMBEDDED GAME</span><span>REBEL PAINT</span></div>
     </div>
   </div>
 
-  <section class="stats" aria-label="Project at a glance">
+  <section class="stats" aria-label="Archive at a glance">
     <div class="wrap stats__grid">
-      <div class="stat" data-reveal><b><span data-count="3" data-pad="2">03</span></b><span>Flight profiles</span></div>
-      <div class="stat" data-reveal style="--delay:.06s"><b><span data-count="390">390</span> <small>PTS</small></b><span>Max run score</span></div>
-      <div class="stat" data-reveal style="--delay:.12s"><b><span data-count="30">30</span> <small>FPS</small></b><span>Flight loop</span></div>
+      <div class="stat" data-reveal><b><span data-count="8" data-pad="2">08</span></b><span>NASA frames</span></div>
+      <div class="stat" data-reveal style="--delay:.06s"><b><span data-count="2" data-pad="2">02</span></b><span>Silent films</span></div>
+      <div class="stat" data-reveal style="--delay:.12s"><b><span data-count="4" data-pad="2">04</span></b><span>Flight milestones</span></div>
       <div class="stat" data-reveal style="--delay:.18s"><b><span data-count="100">100</span>%</b><span>Local by design</span></div>
     </div>
   </section>
 
-  <section class="section" id="download">
+  <section class="section" id="films">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="eyebrow">Release channel · v1.1.0</p>
-        <h2>Download the simulator</h2>
-        <p class="lede">Prebuilt desktop bundles are published with every tagged release and generated on GitHub Actions runners from the source in this repository. Unzip, run, fly.</p>
+        <p class="eyebrow">Film log · NASA public domain</p>
+        <h2>Real hardware. Silent cuts.</h2>
+        <p class="lede">Two short studies cut from NASA's coverage of SpaceX missions: a daytime Falcon 9 ascent and a Crew Dragon return under parachutes. Muted, monochrome and trimmed to the motion.</p>
       </div>
-      <div class="downloads">
-        <a class="tile" href="https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-Windows.zip" data-reveal style="--delay:.05s">
-          <span class="tile-label">Windows</span>
-          <span class="tile-title">Download for Windows</span>
-          <span class="tile-meta">.zip · 64-bit folder build · unsigned</span>
-        </a>
-        <a class="tile" href="https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-macOS.zip" data-reveal style="--delay:.12s">
-          <span class="tile-label">macOS</span>
-          <span class="tile-title">Download for Mac</span>
-          <span class="tile-meta">.zip · .app bundle · unsigned</span>
-        </a>
-        <a class="tile" href="simulator.py" data-reveal style="--delay:.19s">
-          <span class="tile-label">Source</span>
-          <span class="tile-title">View source (.py)</span>
-          <span class="tile-meta">Python 3.8+ · standard library only</span>
-        </a>
-      </div>
-      <p class="note" data-reveal><b>Unsigned builds:</b> Windows may show SmartScreen — choose <b>More info</b>, then <b>Run anyway</b>. macOS may block the app — right-click it, choose <b>Open</b>, then <b>Open</b> again. The first flight writes one small pilot record to your home directory.</p>
-    </div>
-  </section>
-
-  <section class="section" id="missions">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <p class="eyebrow">Flight plan · three playable profiles</p>
-        <h2>Three flights, not three buttons</h2>
-        <p class="lede">Every mission pairs a strategic decision with a live control loop. The choice sets the difficulty; your hands decide the performance bonus. Swipe, scroll or use the arrows.</p>
-      </div>
-      <div class="slider" data-reveal>
-        <div class="slider__bar">
-          <span class="slider__count" id="slide-index" aria-live="polite">01 / 03</span>
-          <div class="slider__buttons">
-            <button class="slider-btn" id="slide-prev" type="button" aria-label="Previous mission">←</button>
-            <button class="slider-btn" id="slide-next" type="button" aria-label="Next mission">→</button>
+      <div class="films">
+        <article class="film" data-reveal style="--delay:.05s">
+          <div class="film__media">
+            <span class="film__stamp">Film 01 / Liftoff</span>
+            <video data-ambient muted loop playsinline controls preload="metadata" width="768" height="432" poster="assets/video/crew5-launch-poster.jpg" aria-label="Silent monochrome film of a SpaceX Falcon 9 lifting off with Crew Dragon">
+              <source src="assets/video/crew5-launch.mp4" type="video/mp4">
+              Your browser cannot play this film. <a href="assets/video/crew5-launch.mp4">Open the MP4</a>.
+            </video>
           </div>
-        </div>
-        <div class="mission-track" id="mission-track" tabindex="0" aria-label="Mission profiles">
-          <article class="mission-slide is-active" data-slide="0">
-            <span class="mission-code">M01 / PROPELLANT LOAD</span>
-            <h3>Methane, oxygen, Tibanna</h3>
-            <p>Keep the mixture inside a drifting tolerance band while the tanks fill. A metered two percent Tibanna additive widens the band; a Tibanna-dominant mix narrows it and heats the injectors.</p>
-            <dl class="mission-data">
-              <div><dt>Controls</dt><dd>↑ / ↓ trim</dd></div>
-              <div><dt>Decision</dt><dd>Sets the band</dd></div>
+          <div class="film__copy">
+            <p class="eyebrow">Crew-5 · 5 Oct 2022</p>
+            <h3>Nine engines, one direction</h3>
+            <p>The Falcon 9 clears the pad at Kennedy Space Center with Crew Dragon Endurance. The clip keeps the hold-down release, the ignition bloom and the first pitch-over; the sound is removed so the movement carries the frame.</p>
+            <dl class="film__data">
+              <div><dt>Vehicle</dt><dd>Falcon 9 / Dragon</dd></div>
+              <div><dt>Site</dt><dd>LC-39A</dd></div>
+              <div><dt>Runtime</dt><dd>16 sec</dd></div>
+              <div><dt>Source</dt><dd>NASA</dd></div>
             </dl>
-            <span class="mission-slide__foot">Goal · load 100% before the pad clock</span>
-          </article>
-          <article class="mission-slide" data-slide="1">
-            <span class="mission-code">M02 / AUTONOMOUS LANDING</span>
-            <h3>Kamino hoverslam</h3>
-            <p>A booster falls at 38 metres per second over a pitching drone ship. Light the engine late, kill the velocity, and put the legs on the target. The droid profile leaves more fuel; manual control leaves less room.</p>
-            <dl class="mission-data">
-              <div><dt>Controls</dt><dd>SPACE / ↑ burn</dd></div>
-              <div><dt>Also</dt><dd>← → RCS</dd></div>
+            <p class="film__credit">NASA · SpaceX Crew-5 highlights · Public domain</p>
+            <a class="film__link" href="assets/video/crew5-launch.mp4">Open the clean MP4 ↗</a>
+          </div>
+        </article>
+        <article class="film" data-reveal style="--delay:.12s">
+          <div class="film__media">
+            <span class="film__stamp">Film 02 / Splashdown</span>
+            <video data-ambient muted loop playsinline controls preload="metadata" width="768" height="406" poster="assets/video/crew4-splashdown-poster.jpg" aria-label="Silent monochrome film of a Crew Dragon descending under four parachutes toward the ocean">
+              <source src="assets/video/crew4-splashdown.mp4" type="video/mp4">
+              Your browser cannot play this film. <a href="assets/video/crew4-splashdown.mp4">Open the MP4</a>.
+            </video>
+          </div>
+          <div class="film__copy">
+            <p class="eyebrow">Crew-4 · 14 Oct 2022</p>
+            <h3>Four canopies, one ocean</h3>
+            <p>After undocking from the International Space Station, Crew Dragon Freedom descends into the Atlantic under its four main parachutes. The recovery boats are already in frame, waiting for the capsule to touch the water.</p>
+            <dl class="film__data">
+              <div><dt>Vehicle</dt><dd>Crew Dragon</dd></div>
+              <div><dt>Site</dt><dd>Atlantic Ocean</dd></div>
+              <div><dt>Runtime</dt><dd>24 sec</dd></div>
+              <div><dt>Source</dt><dd>NASA</dd></div>
             </dl>
-            <span class="mission-slide__foot">Goal · touchdown below 9.5 m/s, inside the deck</span>
-          </article>
-          <article class="mission-slide" data-slide="2">
-            <span class="mission-code">M03 / BESKAR SHIELDS</span>
-            <h3>Debris field run</h3>
-            <p>Twenty seconds between you and the jump point. Steer through tumbling wreckage; every hit costs a hull segment. Leading-edge Beskar gives you four segments. No shields gives you two.</p>
-            <dl class="mission-data">
-              <div><dt>Controls</dt><dd>← → steer</dd></div>
-              <div><dt>Decision</dt><dd>Sets the hull</dd></div>
-            </dl>
-            <span class="mission-slide__foot">Goal · survive with hull intact, collect close calls</span>
-          </article>
-        </div>
+            <p class="film__credit">NASA · SpaceX Crew-4 splashdown UAS recovery footage · Public domain</p>
+            <a class="film__link" href="assets/video/crew4-splashdown.mp4">Open the clean MP4 ↗</a>
+          </div>
+        </article>
       </div>
+      <p class="film-credit" data-reveal>Both films are trimmed, desaturated and stripped of audio for this archive. NASA does not endorse this project. Full credits: NASA Image and Video Library.</p>
     </div>
   </section>
 
-  <section class="section" id="flight">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <p class="eyebrow">Flight deck · real control loop</p>
-        <h2>The mission is the execution</h2>
-        <p class="lede">Briefings still branch, but the outcome is flown. Each profile runs a different loop at 30 frames per second, with a live HUD, countdown, pause menu and a written debrief.</p>
+  <section class="section" id="sequence">
+    <div class="wrap sequence">
+      <div class="sequence__aside" data-reveal>
+        <p class="eyebrow">Flight profile · scroll to fly</p>
+        <h2>From pad to hoverslam</h2>
+        <p class="lede">Four approximate public milestones from a Falcon 9 flight. The line fills as you move through the sequence; the numbers are a study, not live telemetry.</p>
+        <div class="sequence__meter" aria-hidden="true"><i id="sequence-bar"></i></div>
+        <p class="sequence__label" id="sequence-label">T-00:38 · Ignition</p>
       </div>
-      <div class="flight-grid">
-        <article class="flight-card" data-reveal style="--delay:.05s">
-          <h3>LOAD TRIM</h3>
-          <p>Track a moving mixture band. The further you drift, the more injector strain you carry; hold the band and the tanks fill fast.</p>
-          <div class="flight-card__meter"><span>STABILITY</span><span>LIVE %</span></div>
-          <div class="meter"><i style="width:78%"></i></div>
-        </article>
-        <article class="flight-card" data-reveal style="--delay:.12s">
-          <h3>HOVERSLAM</h3>
-          <p>One engine, limited fuel, wind and a deck. Feather the burn, translate with RCS, and arrive at zero velocity instead of zero altitude.</p>
-          <div class="flight-card__meter"><span>FUEL</span><span>61%</span></div>
-          <div class="meter"><i style="width:61%"></i></div>
-        </article>
-        <article class="flight-card" data-reveal style="--delay:.19s">
-          <h3>DEBRIS RUN</h3>
-          <p>Steer a top-down X-wing through twenty seconds of wreckage. Close calls score; hull hits subtract. The jump point is the only exit.</p>
-          <div class="flight-card__meter"><span>HULL</span><span>4 / 4</span></div>
-          <div class="meter"><i style="width:100%"></i></div>
-        </article>
-      </div>
-      <div class="control-strip" data-reveal>
-        <div class="control"><span>Trim / thrust</span><b>↑ ↓ W S SPACE</b></div>
-        <div class="control"><span>Steer</span><b>← → A D</b></div>
-        <div class="control"><span>Pause</span><b>P · ESC</b></div>
-        <div class="control"><span>Fullscreen</span><b>F11</b></div>
-      </div>
-      <div class="launch" data-reveal>
-        <div class="launch__stage">
-          <span class="launch__stamp">Loop · 07 seconds</span>
-          <svg viewBox="0 0 520 360" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
-            <g stroke="#8B96A3" stroke-opacity=".22" stroke-width="1">
-              <path d="M0 60H520M0 120H520M0 180H520M0 240H520M0 300H520"/>
-              <path d="M80 0V360M160 0V360M240 0V360M320 0V360M400 0V360M480 0V360"/>
-            </g>
-            <g class="landing-ping" fill="none" stroke="#FFE81F">
-              <ellipse cx="260" cy="300" rx="64" ry="13"/>
-              <ellipse cx="260" cy="300" rx="34" ry="7"/>
-            </g>
-            <path d="M115 300H405" stroke="#C9D1D9" stroke-width="1.5"/>
-            <path d="M150 300V330M370 300V330M150 330H370M190 300L165 350M330 300L355 350" stroke="#8B96A3"/>
-            <g class="booster-loop">
-              <path d="M260 112L278 146V238H242V146Z" fill="#000000" stroke="#C9D1D9" stroke-width="1.5"/>
-              <path d="M260 112L260 92L269 112" fill="none" stroke="#FFE81F" stroke-width="1.5"/>
-              <path d="M242 190L226 208V220L242 212M278 190L294 208V220L278 212" fill="none" stroke="#8B96A3"/>
-              <path d="M246 238L232 258H250M274 238L288 258H270" fill="none" stroke="#C9D1D9"/>
-              <path d="M250 238H270V248H250Z" fill="#8B96A3"/>
-              <path class="launch-flame" d="M252 248L260 292L268 248Z" fill="#FFE81F"/>
-              <path class="launch-flame" d="M256 248L260 278L264 248Z" fill="#000000"/>
-            </g>
-            <path d="M260 300V330" stroke="#FFE81F" stroke-dasharray="3 5" stroke-opacity=".65"/>
-          </svg>
-        </div>
-        <div class="launch__copy">
-          <p class="eyebrow">Animated flight loop</p>
-          <h3>Late burn. Zero margin.</h3>
-          <p>The real hoverslam: one engine, a deck that will not wait, and a landing that has to happen at the exact moment velocity reaches zero. This is the loop from Mission 02, running on repeat.</p>
-          <dl class="launch__readout">
-            <div><dt>Descent</dt><dd>38 M/S</dd></div>
-            <div><dt>Engine</dt><dd>1 / 3</dd></div>
-            <div><dt>Target</dt><dd>DRONE SHIP</dd></div>
-            <div><dt>Margin</dt><dd>0.0 M</dd></div>
-          </dl>
-          <div class="launch__bar" aria-hidden="true"><i></i></div>
-        </div>
-      </div>
+      <ol class="sequence__list">
+        <li class="sequence__step" data-step data-time="T-00:38" data-stage="Ignition">
+          <div class="step__index"><span>01 / Pad 39A</span><b>T-00:38</b></div>
+          <h3>Ignition</h3>
+          <p>Nine Merlin engines reach full thrust while the hold-down clamps keep the stack on the pad. The release is a single mechanical decision; the rest of the flight is a balance of propellant and timing.</p>
+          <dl class="step__data"><div><dt>Propellant</dt><dd>RP-1 / LOX</dd></div><div><dt>Engines</dt><dd>9 × Merlin 1D</dd></div></dl>
+        </li>
+        <li class="sequence__step" data-step data-time="T+02:32" data-stage="Stage separation">
+          <div class="step__index"><span>02 / Max Q</span><b>T+02:32</b></div>
+          <h3>Stage separation</h3>
+          <p>The first stage shuts down and separates. Cold-gas thrusters flip the booster for its return burn while the second-stage Merlin pushes Dragon toward orbit.</p>
+          <dl class="step__data"><div><dt>Booster</dt><dd>Return burn</dd></div><div><dt>Payload</dt><dd>Crew Dragon</dd></div></dl>
+        </li>
+        <li class="sequence__step" data-step data-time="T+06:30" data-stage="Entry burn">
+          <div class="step__index"><span>03 / Re-entry</span><b>T+06:30</b></div>
+          <h3>Entry burn</h3>
+          <p>Three engines light against the direction of travel to slow the first stage before the atmosphere does the rest. Grid fins take over the steering as the booster falls back toward the coast.</p>
+          <dl class="step__data"><div><dt>Engines</dt><dd>3 × Merlin</dd></div><div><dt>Control</dt><dd>Grid fins</dd></div></dl>
+        </li>
+        <li class="sequence__step" data-step data-time="T+08:24" data-stage="Landing burn">
+          <div class="step__index"><span>04 / Landing zone</span><b>T+08:24</b></div>
+          <h3>Landing burn</h3>
+          <p>A single engine lights for the hoverslam: too early wastes propellant, too late ends the booster. The legs deploy and the stage meets the ground at zero velocity, not zero altitude.</p>
+          <dl class="step__data"><div><dt>Engine</dt><dd>1 × Merlin</dd></div><div><dt>Target</dt><dd>Zero velocity</dd></div></dl>
+        </li>
+      </ol>
     </div>
   </section>
 
@@ -424,42 +461,63 @@
       <div class="section-head" data-reveal>
         <p class="eyebrow">Visual archive · NASA public domain</p>
         <h2>Real hardware, monochrome</h2>
-        <p class="lede">Five NASA frames of the Falcon 9 and Crew Dragon, resized and toned to the project palette. The engineering is real; the Star Wars paint is ours. Open any frame for the full image.</p>
+        <p class="lede">Eight NASA frames of the Falcon 9 and Crew Dragon, resized and toned to the project palette. The engineering is real; the Star Wars paint is ours. Open any frame for the full image.</p>
       </div>
       <div class="archive-grid">
-        <figure class="photo photo--tall" data-reveal style="--delay:.04s">
+        <figure class="photo photo--tall" data-tilt data-reveal style="--delay:.04s">
           <a class="photo__link" href="assets/photos/falcon-rollout.jpg" data-photo data-title="Falcon 9 / Crew-9 rollout" data-credit="NASA/Keegan Barber · 27 Sep 2024">
             <img src="assets/photos/falcon-rollout.jpg" width="820" height="1280" alt="A SpaceX Falcon 9 with a Crew Dragon spacecraft stands vertical on the launch pad, photographed at an angle." loading="lazy" decoding="async">
             <span class="photo__index">01</span><span class="photo__zoom">Open ↗</span>
             <span class="photo__caption"><strong>Crew-9 rollout</strong><small>NASA/Keegan Barber</small></span>
           </a>
         </figure>
-        <figure class="photo photo--wide" data-reveal style="--delay:.1s">
+        <figure class="photo photo--wide" data-tilt data-reveal style="--delay:.1s">
           <a class="photo__link" href="assets/photos/falcon-landing.jpg" data-photo data-title="Landing after Crew-12" data-credit="NASA/John Kraus · 13 Feb 2026">
             <img src="assets/photos/falcon-landing.jpg" width="1100" height="733" alt="A Falcon 9 first stage lands in the distance at night, its engine glowing above a dark treeline." loading="lazy" decoding="async">
             <span class="photo__index">02</span><span class="photo__zoom">Open ↗</span>
             <span class="photo__caption"><strong>Landing after Crew-12</strong><small>NASA/John Kraus</small></span>
           </a>
         </figure>
-        <figure class="photo" data-reveal style="--delay:.16s">
+        <figure class="photo" data-tilt data-reveal style="--delay:.16s">
           <a class="photo__link" href="assets/photos/dragon-close.jpg" data-photo data-title="Crew-13 Dragon" data-credit="NASA · 1 Oct 2026">
             <img src="assets/photos/dragon-close.jpg" width="1100" height="618" alt="A SpaceX Crew Dragon capsule in orbit, seen close-up with its open nose cone and docking ring." loading="lazy" decoding="async">
             <span class="photo__index">03</span><span class="photo__zoom">Open ↗</span>
             <span class="photo__caption"><strong>Crew-13 Dragon</strong><small>NASA · 2026</small></span>
           </a>
         </figure>
-        <figure class="photo" data-reveal style="--delay:.22s">
+        <figure class="photo" data-tilt data-reveal style="--delay:.22s">
           <a class="photo__link" href="assets/photos/dragon-approach.jpg" data-photo data-title="Crew-11 approach" data-credit="NASA · 2 Aug 2025">
             <img src="assets/photos/dragon-approach.jpg" width="1100" height="733" alt="A small Crew Dragon spacecraft approaches the International Space Station above cloud-covered Earth." loading="lazy" decoding="async">
             <span class="photo__index">04</span><span class="photo__zoom">Open ↗</span>
             <span class="photo__caption"><strong>Crew-11 approach</strong><small>NASA · 2025</small></span>
           </a>
         </figure>
-        <figure class="photo photo--wide" data-reveal style="--delay:.28s">
+        <figure class="photo photo--wide" data-tilt data-reveal style="--delay:.28s">
           <a class="photo__link" href="assets/photos/earth-horizon.jpg" data-photo data-title="Cupola sunset" data-credit="NASA · 1 Sep 2024">
             <img src="assets/photos/earth-horizon.jpg" width="1100" height="733" alt="The setting sun glints over Earth's horizon, seen past the structure of the International Space Station cupola." loading="lazy" decoding="async">
             <span class="photo__index">05</span><span class="photo__zoom">Open ↗</span>
             <span class="photo__caption"><strong>Cupola sunset</strong><small>NASA · 2024</small></span>
+          </a>
+        </figure>
+        <figure class="photo" data-tilt data-reveal style="--delay:.34s">
+          <a class="photo__link" href="assets/photos/crew9-launch.jpg" data-photo data-title="Crew-9 liftoff" data-credit="NASA/Keegan Barber · 28 Sep 2024">
+            <img src="assets/photos/crew9-launch.jpg" width="1100" height="742" alt="A SpaceX Falcon 9 climbs above the launch pad, leaving a bright exhaust plume and billowing smoke over the Florida coast." loading="lazy" decoding="async">
+            <span class="photo__index">06</span><span class="photo__zoom">Open ↗</span>
+            <span class="photo__caption"><strong>Crew-9 liftoff</strong><small>NASA/Keegan Barber</small></span>
+          </a>
+        </figure>
+        <figure class="photo" data-tilt data-reveal style="--delay:.38s">
+          <a class="photo__link" href="assets/photos/crew13-landing.jpg" data-photo data-title="Crew-13 return" data-credit="NASA/John Kraus · 1 Oct 2026">
+            <img src="assets/photos/crew13-landing.jpg" width="1100" height="733" alt="A Falcon 9 first stage descends over Florida scrubland with its landing legs deployed and its engine firing." loading="lazy" decoding="async">
+            <span class="photo__index">07</span><span class="photo__zoom">Open ↗</span>
+            <span class="photo__caption"><strong>Crew-13 return</strong><small>NASA/John Kraus</small></span>
+          </a>
+        </figure>
+        <figure class="photo" data-tilt data-reveal style="--delay:.42s">
+          <a class="photo__link" href="assets/photos/demo1-splashdown.jpg" data-photo data-title="Demo-1 splashdown" data-credit="NASA/Cory Huston · 8 Mar 2019">
+            <img src="assets/photos/demo1-splashdown.jpg" width="1100" height="733" alt="A Crew Dragon capsule hangs beneath four parachutes above the Atlantic Ocean, with recovery boats waiting below." loading="lazy" decoding="async">
+            <span class="photo__index">08</span><span class="photo__zoom">Open ↗</span>
+            <span class="photo__caption"><strong>Demo-1 splashdown</strong><small>NASA/Cory Huston</small></span>
           </a>
         </figure>
         <aside class="photo-note" data-reveal style="--delay:.34s">
@@ -470,7 +528,7 @@
           <a href="https://images.nasa.gov/" target="_blank" rel="noopener noreferrer">Browse NASA Images ↗</a>
         </aside>
       </div>
-      <p class="archive-credit" data-reveal>Sources: NASA Image and Video Library. IDs NHQ202409270003, NHQ20260213_admin_0009, iss075e0157531, iss073e0422191, iss071e581260_alt. Images are resized and toned for this page; the originals remain in the NASA public domain.</p>
+      <p class="archive-credit" data-reveal>Sources: NASA Image and Video Library. Stills: NHQ202409270003, NHQ20260213_admin_0009, iss075e0157531, iss073e0422191, iss071e581260_alt, NHQ202409280010, NHQ20261001_admin_0012, KSC-20190308-PH_CSH01_0190. Films: KSC-20221005-VP-MWC01-001-CREW5-HIGHLIGHTS-3315114 and KSC-20221014-MH-MTD01-0001-SpaceX_Crew_4_Splashdown_UAS_Recovery_Footage-3316493. Images and footage are resized, toned, trimmed and muted for this page; the originals remain in the NASA public domain.</p>
     </div>
   </section>
 
@@ -489,16 +547,20 @@
     </div>
   </section>
 
-  <section class="section" id="integrations">
+  <section class="section" id="simulator">
     <div class="wrap">
-      <div class="section-head" data-reveal>
-        <p class="eyebrow">Local systems</p>
-        <h2>Simulated on purpose, local by design</h2>
-      </div>
-      <div class="split">
-        <div data-reveal><h3>Auth0</h3><p>The login screen is a timed, local animation with a token generated by the app itself. No identity provider is contacted and no credentials are stored.</p><span class="status">DEMO ONLY</span></div>
-        <div data-reveal style="--delay:.08s"><h3>Tiger Data</h3><p>The final save writes a few million simulated coordinate rows to a local counter. The hypertable, the progress bar and the row count are presentation only.</p><span class="status">NO NETWORK</span></div>
-        <div data-reveal style="--delay:.16s"><h3>Pilot record</h3><p>The app keeps one JSON file in your home directory: best score, rank, callsign and flight count. No sockets, no subprocesses, no telemetry. Delete the file to reset.</p><span class="status">LOCAL ONLY</span></div>
+      <div class="simulator" data-reveal>
+        <div>
+          <p class="eyebrow">Separate desktop build</p>
+          <h2>The simulator is its own room</h2>
+          <p>No game is embedded in this page. The playable Interstellar Driver's Ed is a single-file Python desktop app with three flight profiles, a local pilot record and no network calls. This archive stays readable on its own; the simulator opens when you choose to download it.</p>
+          <p class="simulator__note">Windows · macOS · Python 3.8+ · MIT · local save only</p>
+        </div>
+        <div class="simulator__links">
+          <a class="btn btn--primary" href="https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest">Download the desktop build</a>
+          <a class="btn" href="simulator.py">Read simulator.py</a>
+          <a class="btn" href="https://github.com/Jaskirat025/interstellar-drivers-ed">Open the repository</a>
+        </div>
       </div>
     </div>
   </section>
@@ -506,7 +568,7 @@
 
 <footer>
   <div class="wrap foot">
-    <span>MLH Hack Week · v1.1.0 · simulated sponsor integrations · NASA imagery public domain</span>
+    <span>Rebel Aerospace Archive · NASA imagery and footage public domain · fan project</span>
     <nav aria-label="Footer">
       <a href="simulator.py">Source</a>
       <a href="https://github.com/Jaskirat025/interstellar-drivers-ed">Repository</a>
@@ -527,35 +589,157 @@
   (function () {
     "use strict";
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var clamp = function (value, min, max) { return Math.min(max, Math.max(min, value)); };
 
-    var progress = document.getElementById("scroll-progress");
-    function paintProgress() {
-      if (!progress) return;
-      var max = document.documentElement.scrollHeight - window.innerHeight;
-      var value = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-      progress.style.transform = "scaleX(" + value + ")";
-    }
-    window.addEventListener("scroll", paintProgress, { passive: true });
-    window.addEventListener("resize", paintProgress);
-    paintProgress();
-
-    var toggle = document.getElementById("auth-toggle");
-    var note = document.getElementById("auth-note");
-    if (toggle && note) {
-      toggle.addEventListener("click", function () {
-        var open = toggle.getAttribute("aria-expanded") === "true";
-        toggle.setAttribute("aria-expanded", open ? "false" : "true");
-        note.hidden = open;
-        if (!open) note.focus();
+    var navToggle = document.getElementById("nav-toggle");
+    var navLinks = document.getElementById("nav-links");
+    if (navToggle && navLinks) {
+      navToggle.addEventListener("click", function () {
+        var open = navToggle.getAttribute("aria-expanded") === "true";
+        navToggle.setAttribute("aria-expanded", open ? "false" : "true");
+        navLinks.classList.toggle("is-open", !open);
+      });
+      navLinks.addEventListener("click", function (event) {
+        if (event.target.closest("a")) {
+          navToggle.setAttribute("aria-expanded", "false");
+          navLinks.classList.remove("is-open");
+        }
       });
       document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && !note.hidden) {
-          note.hidden = true;
-          toggle.setAttribute("aria-expanded", "false");
-          toggle.focus();
+        if (event.key === "Escape" && navLinks.classList.contains("is-open")) {
+          navToggle.setAttribute("aria-expanded", "false");
+          navLinks.classList.remove("is-open");
+          navToggle.focus();
         }
       });
     }
+
+    var progress = document.getElementById("scroll-progress");
+    var sequence = document.getElementById("sequence");
+    var sequenceBar = document.getElementById("sequence-bar");
+    var sequenceLabel = document.getElementById("sequence-label");
+    var steps = Array.prototype.slice.call(document.querySelectorAll("[data-step]"));
+    function paintScroll() {
+      if (progress) {
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        progress.style.transform = "scaleX(" + (max > 0 ? clamp(window.scrollY / max, 0, 1) : 0) + ")";
+      }
+      if (sequence && sequenceBar) {
+        var rect = sequence.getBoundingClientRect();
+        var total = Math.max(1, rect.height - window.innerHeight * 0.3);
+        var value = clamp((window.innerHeight * 0.55 - rect.top) / total, 0, 1);
+        sequenceBar.style.height = (value * 100).toFixed(2) + "%";
+        if (steps.length) {
+          var index = Math.min(steps.length - 1, Math.floor(value * steps.length));
+          steps.forEach(function (step, i) { step.classList.toggle("is-current", i === index); });
+          if (sequenceLabel) {
+            var active = steps[index];
+            sequenceLabel.textContent = active.getAttribute("data-time") + " · " + active.getAttribute("data-stage");
+          }
+        }
+      }
+    }
+    var scrollTick = false;
+    window.addEventListener("scroll", function () {
+      if (scrollTick) return;
+      scrollTick = true;
+      window.requestAnimationFrame(function () { paintScroll(); scrollTick = false; });
+    }, { passive: true });
+    window.addEventListener("resize", paintScroll);
+    paintScroll();
+
+    var canvas = document.getElementById("starfield");
+    if (canvas && canvas.getContext) {
+      var ctx = canvas.getContext("2d");
+      var stars = [];
+      var width = 0;
+      var height = 0;
+      var dpr = 1;
+      var pointerX = 0.5;
+      var pointerY = 0.5;
+      var shoot = null;
+      var nextShoot = 2200;
+      var previous = 0;
+      var frameId = 0;
+      var palette = ["#8B96A3", "#C9D1D9", "#8B96A3", "#8B96A3", "#FFE81F"];
+      function sizeCanvas() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        var count = Math.min(210, Math.max(75, Math.round(width * height / 12500)));
+        stars = [];
+        for (var i = 0; i < count; i++) {
+          stars.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            r: Math.random() * 1.35 + 0.35,
+            depth: Math.random() * 0.85 + 0.15,
+            speed: Math.random() * 0.018 + 0.003,
+            phase: Math.random() * Math.PI * 2,
+            color: palette[Math.floor(Math.random() * palette.length)]
+          });
+        }
+      }
+      function draw(now) {
+        var dt = previous ? Math.min(48, now - previous) : 16;
+        previous = now;
+        ctx.clearRect(0, 0, width, height);
+        var scroll = window.scrollY || 0;
+        stars.forEach(function (star) {
+          var y = star.y - scroll * star.depth * 0.035 + now * star.speed;
+          y = ((y % (height + 30)) + height + 30) % (height + 30) - 15;
+          var x = star.x + (pointerX - 0.5) * star.depth * 24;
+          ctx.globalAlpha = 0.24 + star.depth * 0.55 + Math.sin(now * 0.0009 + star.phase) * 0.12;
+          ctx.fillStyle = star.color;
+          ctx.beginPath();
+          ctx.arc(x, y, star.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        if (!shoot && now > nextShoot) {
+          shoot = {
+            x: Math.random() * width * 0.7,
+            y: Math.random() * height * 0.35,
+            vx: 7 + Math.random() * 5,
+            vy: 2.5 + Math.random() * 2.4,
+            life: 1
+          };
+          nextShoot = now + 6500 + Math.random() * 7000;
+        }
+        if (shoot) {
+          shoot.x += shoot.vx * dt * 0.06;
+          shoot.y += shoot.vy * dt * 0.06;
+          shoot.life -= dt * 0.0012;
+          ctx.globalAlpha = Math.max(0, shoot.life) * 0.7;
+          ctx.strokeStyle = "#FFE81F";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(shoot.x, shoot.y);
+          ctx.lineTo(shoot.x - shoot.vx * 5, shoot.y - shoot.vy * 5);
+          ctx.stroke();
+          if (shoot.life <= 0 || shoot.x > width + 40 || shoot.y > height + 40) shoot = null;
+        }
+        ctx.globalAlpha = 1;
+        frameId = window.requestAnimationFrame(draw);
+      }
+      sizeCanvas();
+      if (reduce) {
+        draw(0);
+        window.cancelAnimationFrame(frameId);
+      } else {
+        frameId = window.requestAnimationFrame(draw);
+        window.addEventListener("pointermove", function (event) {
+          pointerX = event.clientX / width;
+          pointerY = event.clientY / height;
+        }, { passive: true });
+        window.addEventListener("resize", function () { sizeCanvas(); paintScroll(); });
+      }
+    }
+
+    var orbitMap = document.getElementById("orbit-map");
+    if (orbitMap && reduce && orbitMap.pauseAnimations) orbitMap.pauseAnimations();
 
     var reveals = Array.prototype.slice.call(document.querySelectorAll("[data-reveal]"));
     if (reveals.length && "IntersectionObserver" in window && !reduce) {
@@ -586,12 +770,12 @@
       var start = null;
       function tick(now) {
         if (start === null) start = now;
-        var progress = Math.min(1, (now - start) / 900);
-        var eased = 1 - Math.pow(1 - progress, 3);
+        var value = Math.min(1, (now - start) / 900);
+        var eased = 1 - Math.pow(1 - value, 3);
         var text = String(Math.round(target * eased));
         while (text.length < pad) text = "0" + text;
         element.textContent = text;
-        if (progress < 1) window.requestAnimationFrame(tick);
+        if (value < 1) window.requestAnimationFrame(tick);
       }
       window.requestAnimationFrame(tick);
     }
@@ -608,6 +792,43 @@
       } else {
         counters.forEach(finishCount);
       }
+    }
+
+    var films = Array.prototype.slice.call(document.querySelectorAll("[data-ambient]"));
+    if (films.length && "IntersectionObserver" in window) {
+      if (reduce) {
+        films.forEach(function (film) { film.pause(); });
+      } else {
+        var filmObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              var attempt = entry.target.play();
+              if (attempt && attempt.catch) attempt.catch(function () {});
+            } else {
+              entry.target.pause();
+            }
+          });
+        }, { threshold: 0.45 });
+        films.forEach(function (film) { film.muted = true; filmObserver.observe(film); });
+      }
+    }
+
+    if (!reduce && window.matchMedia && window.matchMedia("(hover:hover) and (pointer:fine)").matches) {
+      Array.prototype.slice.call(document.querySelectorAll("[data-tilt]")).forEach(function (card) {
+        var image = card.querySelector("img");
+        if (!image) return;
+        card.addEventListener("pointermove", function (event) {
+          var rect = card.getBoundingClientRect();
+          var x = (event.clientX - rect.left) / rect.width - 0.5;
+          var y = (event.clientY - rect.top) / rect.height - 0.5;
+          image.style.setProperty("--tx", (x * 10).toFixed(1) + "px");
+          image.style.setProperty("--ty", (y * 8).toFixed(1) + "px");
+        });
+        card.addEventListener("pointerleave", function () {
+          image.style.setProperty("--tx", "0px");
+          image.style.setProperty("--ty", "0px");
+        });
+      });
     }
 
     var lightbox = document.getElementById("lightbox");
@@ -630,9 +851,7 @@
           lightbox.showModal();
         });
       });
-      if (lightboxClose) {
-        lightboxClose.addEventListener("click", function () { lightbox.close(); });
-      }
+      if (lightboxClose) lightboxClose.addEventListener("click", function () { lightbox.close(); });
       lightbox.addEventListener("click", function (event) {
         if (event.target === lightbox) lightbox.close();
       });
@@ -641,57 +860,6 @@
         lightboxImage.removeAttribute("src");
       });
     }
-
-    var track = document.getElementById("mission-track");
-    if (!track) return;
-    var slides = Array.prototype.slice.call(track.querySelectorAll(".mission-slide"));
-    var indexLabel = document.getElementById("slide-index");
-    var prev = document.getElementById("slide-prev");
-    var next = document.getElementById("slide-next");
-    var current = 0;
-
-    function setActive(index, shouldScroll) {
-      index = Math.max(0, Math.min(slides.length - 1, index));
-      current = index;
-      slides.forEach(function (slide, i) {
-        slide.classList.toggle("is-active", i === index);
-      });
-      if (indexLabel) {
-        indexLabel.textContent = ("0" + (index + 1)).slice(-2) + " / " + ("0" + slides.length).slice(-2);
-      }
-      if (prev) prev.disabled = index === 0;
-      if (next) next.disabled = index === slides.length - 1;
-      if (shouldScroll) {
-        var left = slides[index].offsetLeft - track.offsetLeft - 16;
-        track.scrollTo({ left: left, behavior: reduce ? "auto" : "smooth" });
-      }
-    }
-
-    if (prev) prev.addEventListener("click", function () { setActive(current - 1, true); });
-    if (next) next.addEventListener("click", function () { setActive(current + 1, true); });
-    slides.forEach(function (slide, i) {
-      slide.addEventListener("click", function () { setActive(i, true); });
-    });
-    track.addEventListener("keydown", function (event) {
-      if (event.key === "ArrowLeft") { event.preventDefault(); setActive(current - 1, true); }
-      if (event.key === "ArrowRight") { event.preventDefault(); setActive(current + 1, true); }
-    });
-    var ticking = false;
-    track.addEventListener("scroll", function () {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(function () {
-        var nearest = 0;
-        var best = Infinity;
-        slides.forEach(function (slide, i) {
-          var distance = Math.abs(slide.offsetLeft - track.offsetLeft - track.scrollLeft);
-          if (distance < best) { best = distance; nearest = i; }
-        });
-        if (nearest !== current) setActive(nearest, false);
-        ticking = false;
-      });
-    }, { passive: true });
-    setActive(0, false);
   })();
 </script>
 </body>

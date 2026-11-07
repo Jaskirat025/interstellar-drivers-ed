@@ -1,8 +1,8 @@
-# Rebel-SpaceX Flight Simulator
+# Rebel Aerospace Archive & Flight Simulator
 
-**The Interstellar Driver's Ed** is a playable desktop flight simulator built for MLH Hack Week. The fiction is Star Wars; the engineering trade-offs are borrowed from SpaceX. Choose a mission profile, then fly it: trim a methalox load, land a booster on a Kamino drone ship, or steer an X-wing through a debris field.
+**The Interstellar Driver's Ed** is two deliberately separate things: a cinematic visual archive (`index.html`) and a playable desktop flight simulator (`simulator.py`). The site documents real SpaceX hardware through a Star Wars lens; the game is a single-file Tkinter app that lives outside the page. No game is embedded in the archive.
 
-The app is a single Tkinter file, uses only the Python standard library, and keeps one small pilot record on the local machine. Auth0 and Tiger Data are clearly labelled simulations; nothing is sent anywhere.
+The archive ships eight NASA photographs, two silent public-domain films, a canvas starfield and a scroll-driven flight profile. The app uses only the Python standard library and keeps one small pilot record on the local machine. Auth0 and Tiger Data in the simulator are clearly labelled simulations; nothing is sent anywhere.
 
 ## MLH Hack Week
 
@@ -35,14 +35,15 @@ A judge should never need a live tenant or an API key to see the flow. The Auth0
 
 ## Visual archive and landing page
 
-The landing page (`index.html`) is a self-contained companion site. It ships no remote fonts, scripts, or hotlinked images and works from a local static server.
+The landing page (`index.html`) is a self-contained companion site, intentionally separate from the game. It ships no remote fonts, scripts, hotlinked images, or embedded game and works from a local static server. The simulator is linked from the page but never runs inside it.
 
-- **Five NASA photographs** in `assets/photos/`: Falcon 9/Crew-9 rollout, Falcon 9 landing after Crew-12, Crew-13 Dragon, Crew-11 approach, and the Cupola sunset. They are resized and toned to the black/grey site palette. The originals are NASA public-domain imagery and are not presented as Star Wars or SpaceX mission assets.
-- **Animated hoverslam loop:** an inline SVG booster descends to a drone-ship deck with a flickering engine, landing ping, and telemetry bar. No GIF, video, or external asset is required.
-- **Scroll-driven interface:** mission slider with snap scrolling, reveal-on-scroll sections, animated counters, twinkling starfield, ticker, HUD scan line, and scroll progress bar. All motion is disabled by `prefers-reduced-motion`.
+- **Eight NASA photographs** in `assets/photos/`: Falcon 9/Crew-9 rollout, Falcon 9 landing after Crew-12, Crew-13 Dragon, Crew-11 approach, the Cupola sunset, Crew-9 liftoff, Falcon 9 landing after Crew-13, and the Demo-1 splashdown. They are resized and toned to the black/grey site palette. The originals are NASA public-domain imagery and are not presented as Star Wars or SpaceX mission assets.
+- **Two local silent films** in `assets/video/`: a 16-second Crew-5 liftoff and a 24-second Crew-4 splashdown, trimmed from NASA coverage, desaturated, stripped of audio and encoded as H.264. Posters are local frames. Nothing is hotlinked and no YouTube iframe is used.
+- **Coded motion:** a canvas starfield drifts with scroll and pointer movement, an SVG orbital plot loops around its labels, the flight-profile meter fills as the sequence scrolls, sections reveal with `IntersectionObserver`, counters animate, and archive images tilt with the pointer. All motion is disabled or paused for `prefers-reduced-motion`.
 - **Photo lightbox:** each frame opens a native `<dialog>` viewer with title, credit, and keyboard/Escape support. Without JavaScript, the same links open the full JPEG directly.
+- **Separate simulator door:** a single `#simulator` panel links to the release and source. It does not embed the Tkinter app, a canvas game or a fake login.
 
-Credits: NASA/Keegan Barber (NHQ202409270003), NASA/John Kraus (NHQ20260213_admin_0009), NASA (iss075e0157531, iss073e0422191, iss071e581260_alt). NASA does not endorse this project. Source: [NASA Image and Video Library](https://images.nasa.gov/).
+Credits: NASA/Keegan Barber (NHQ202409270003, NHQ202409280010), NASA/John Kraus (NHQ20260213_admin_0009, NHQ20261001_admin_0012), NASA (iss075e0157531, iss073e0422191, iss071e581260_alt), NASA/Cory Huston (KSC-20190308-PH_CSH01_0190), NASA Crew-5 highlights and Crew-4 splashdown footage. NASA does not endorse this project. Source: [NASA Image and Video Library](https://images.nasa.gov/). Full media notes: `assets/photos/README.md` and `assets/video/README.md`.
 
 ## Controls
 
@@ -118,7 +119,7 @@ Prebuilt v1.1.0 bundles are attached to the latest GitHub Release.
 - **Windows:** [InterstellarDriversEd-Windows.zip](https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-Windows.zip) — unzip and run `InterstellarDriversEd.exe` inside the folder.
 - **macOS:** [InterstellarDriversEd-macOS.zip](https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest/download/InterstellarDriversEd-macOS.zip) — unzip and move `InterstellarDriversEd.app` to Applications.
 
-The landing page in `index.html` links to these same assets.
+The archive's simulator section links to the latest release; the page does not embed the game.
 
 ## Test
 

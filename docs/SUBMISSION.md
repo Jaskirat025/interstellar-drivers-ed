@@ -53,6 +53,6 @@ Covers the score ceiling, ranks, mission data, corrupt local JSON, chart metrics
 
 ## Limitations
 
-- The bundles are unsigned; SmartScreen/Gatekeeper warnings are expected.
+- The bundles are not code-signed yet; first launch may require one OS confirmation.
 - The archive landing page is separate from the game and is not embedded.
 - The Star Wars framing is unofficial fan material; SpaceX engineering is presented as the real reference.

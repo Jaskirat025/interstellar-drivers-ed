@@ -21,7 +21,11 @@ Fly a Falcon 9 stack through a live propellant load, land a booster on a drone s
 
 No Python installation is needed for these builds. Extract the **whole archive** and run `InterstellarDriversEd.exe` (Windows) or `InterstellarDriversEd.app` (macOS). The macOS build is for M-series Macs; Intel Macs need to run from source.
 
+<details>
+<summary><strong>First launch:</strong> unsigned build, one extra confirmation</summary>
+
 The builds are not code-signed yet. On first launch Windows SmartScreen may ask for **More info → Run anyway**; on macOS, right-click the app and choose **Open**. This is a one-time confirmation, not an installer, account or network check.
+</details>
 
 ## What it is
 
@@ -37,7 +41,7 @@ The builds are not code-signed yet. On first launch Windows SmartScreen may ask 
 2. **The models are original geometry.** `fleet3d.py` contains the X-wing, TIE, Star Destroyer, Falcon 9, Starship, booster, drone ship, launch pad, hangar, planets, astronaut and astromech. No sprite sheets or external model files.
 3. **The hangar is a viewer, not a menu.** Drag to orbit, wheel to zoom, `A` to pause auto-orbit, `R` to reset; the ship and the reference model redraw independently.
 4. **Procedural sound.** `audio.py` synthesises the clicks, engines, warnings, servo, success and failure cues at runtime with pygame. If audio cannot start, the game falls back to silence.
-5. **Characters with a job.** Major Vega, K-3PO and R-2D2 give contextual CAPCOM calls based on mixture error, altitude, drift, fuel and the nearest rock.
+5. **Characters with a job.** Major Vega, K-3PO and R2-D2 give contextual CAPCOM calls based on mixture error, altitude, drift, fuel and the nearest rock.
 6. **A real desktop release.** GitHub Actions runs the tests and packages Windows and macOS builds with PyInstaller.
 
 ## The three missions

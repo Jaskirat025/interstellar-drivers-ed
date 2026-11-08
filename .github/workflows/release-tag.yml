@@ -1,0 +1,89 @@
+name: Release v1.1.0 (temporary)
+
+# Temporary helper: the cloud shell cannot push tags, so this workflow
+# builds the two desktop packages and publishes them on release v1.1.0
+# at the release commit. It is removed right after the assets are verified.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build and UI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade pyinstaller
+          python -m pip install -r requirements.txt
+
+      - name: Verify GUI imports
+        shell: bash
+        run: python -c "import tkinter, customtkinter; print('tkinter', tkinter.TkVersion); print('customtkinter', customtkinter.__version__)"
+
+      - name: Run core tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build Windows folder app
+        if: runner.os == 'Windows'
+        run: pyinstaller --noconfirm --clean --onedir --windowed --noupx --collect-all customtkinter --name InterstellarDriversEd --version-file packaging/version_info.txt simulator.py
+
+      - name: Package Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist\InterstellarDriversEd -DestinationPath InterstellarDriversEd-Windows.zip -Force
+
+      - name: Build macOS app bundle
+        if: runner.os == 'macOS'
+        run: pyinstaller --noconfirm --clean --windowed --noupx --collect-all customtkinter --name InterstellarDriversEd --osx-bundle-identifier com.rebelaerospace.interstellardriversed simulator.py
+
+      - name: Package macOS build
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent "dist/InterstellarDriversEd.app" InterstellarDriversEd-macOS.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: InterstellarDriversEd-${{ runner.os }}
+          path: InterstellarDriversEd-*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release v1.1.0
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach builds to release v1.1.0
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.1.0
+          target_commitish: 762791c78801ee4d280f0687fd014766a203eff5
+          files: artifacts/*.zip
+          generate_release_notes: true

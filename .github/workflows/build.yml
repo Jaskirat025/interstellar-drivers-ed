@@ -60,8 +60,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           PLIST="dist/InterstellarDriversEd.app/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.2.0" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.2.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1.2.0" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.1" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.2.1" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.2.1" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1.2.1" "$PLIST"
 
       - name: Package macOS build
         if: runner.os == 'macOS'
@@ -91,4 +91,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.zip
-          generate_release_notes: true
+          body: |
+            ## The Interstellar Driver's Ed
+
+            A 3D desktop flight simulator: three SpaceX-inspired missions, a five-ship hangar, procedural audio and a software 3D engine.
+
+            ### Download
+            - **Windows x64:** `InterstellarDriversEd-Windows.zip` — extract the whole folder and run `InterstellarDriversEd.exe`
+            - **macOS Apple Silicon:** `InterstellarDriversEd-macOS.zip` — extract and open `InterstellarDriversEd.app`
+
+            These builds are not code-signed yet. On first launch, Windows SmartScreen may ask for **More info → Run anyway**; on macOS, right-click the app and choose **Open**. No account or network is required.
+
+            See the [README](https://github.com/Jaskirat025/interstellar-drivers-ed#readme) for the demo, controls and source instructions.

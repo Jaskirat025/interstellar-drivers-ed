@@ -1,4 +1,4 @@
-# Three-minute judge route · v1.2.0
+# Three-minute judge route · v1.2.1
 
 A complete pass through the desktop game. No account, API key or network is used.
 
@@ -15,7 +15,7 @@ The window opens at 900 × 600 or larger. If there is no audio device, the game 
 
 1. Point out the real 3D scene behind the title: X-wing, Star Destroyer and planet, all software-rendered polygons.
 2. Leave the callsign as `CADET-X` (or type a name) and press **START MISSION**.
-3. The Auth0 sequence is a local simulation. Let the progress bar finish and press **ENTER THE COCKPIT**. The astronaut on the left is a 3D model.
+3. The pilot check is entirely local. Let the progress bar finish and press **ENTER THE COCKPIT**. The astronaut on the left is a 3D model.
 
 ## 0:25–1:15 · Mission 01 and the load trim
 
@@ -48,7 +48,7 @@ The window opens at 900 × 600 or larger. If there is no audio device, the game 
 
 ## 2:55–3:00 · Close
 
-1. Return to the title, then finish the run to show the final score, rank and simulated Tiger Data save.
+1. Return to the title, then finish the run to show the final score, rank and local flight-log save.
 2. Mention the release: the Windows zip contains `InterstellarDriversEd.exe`; the macOS zip contains `InterstellarDriversEd.app`.
 3. Everything is offline. The only file written is `~/.interstellar_drivers_ed/pilot.json`.
 

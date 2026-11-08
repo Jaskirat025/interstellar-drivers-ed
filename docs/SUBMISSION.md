@@ -27,9 +27,9 @@ Desktop and games.
 5. **Characters with a job.** Major Vega, K-3PO and R2-D2 give contextual CAPCOM calls based on mixture error, altitude, drift, fuel and the nearest rock.
 6. **A real desktop release.** GitHub Actions runs the tests, builds a Windows folder + `.exe` and a macOS `.app` with PyInstaller, and attaches both zips to the release.
 
-## Sponsors, honestly simulated
+## Local-only by design
 
-Auth0 and Tiger Data are represented by local simulations: a timed login choreography with a locally generated token, and a hypertable save counter. No tenant, key, account or network request is needed. Both screens say SIMULATION.
+There are no accounts, API keys or network calls. The pilot check and the flight log write a single local JSON record; every screen that uses it is marked `LOCAL`.
 
 ## Run
 

@@ -1,9 +1,8 @@
 """The Interstellar Driver's Ed: Rebel-SpaceX Flight Simulator.
 
-Tkinter desktop app built for MLH Hack Week.
-Auth0 and Tiger Data are simulated on this machine only: no network and
-no subprocesses. The app keeps one small pilot record in the user's home
-directory; nothing ever leaves the computer.
+Tkinter desktop app built for MLH Hack Week. Everything is local: no
+network and no accounts. The app keeps one small pilot record in the user's
+home directory; nothing ever leaves the computer.
 """
 
 import hashlib
@@ -39,9 +38,9 @@ IS_WIN = sys.platform.startswith("win")
 SANS = "Helvetica Neue" if IS_MAC else ("Segoe UI" if IS_WIN else "DejaVu Sans")
 MONO = "Menlo" if IS_MAC else ("Consolas" if IS_WIN else "DejaVu Sans Mono")
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 WINDOW_TITLE = "The Interstellar Driver's Ed · Rebel-SpaceX Flight Simulator"
-FOOTER_TEXT = "v{0} · local pilot log · simulated sponsor integrations".format(APP_VERSION)
+FOOTER_TEXT = "v{0} · local pilot log · offline".format(APP_VERSION)
 RECORD_FOLDER = ".interstellar_drivers_ed"
 
 
@@ -896,7 +895,7 @@ class TitleScreen(Screen):
 
 
 class AuthScreen(Screen):
-    CHECKS = ("AUTHORIZATION WINDOW", "LOCAL CLAIMS", "SESSION TOKEN")
+    CHECKS = ("LOCAL PROFILE", "PILOT RECORD", "SESSION TOKEN")
 
     def __init__(self, parent, app):
         Screen.__init__(self, parent, app)
@@ -925,11 +924,11 @@ class AuthScreen(Screen):
         self.art.bind("<Configure>", self.g(self.draw_art))
         tk.Label(left, text=tracked("Local identity"), font=fnt(8),
                  bg=BG, fg=TEXT, anchor="w").pack(fill="x", padx=18)
-        tk.Label(left, text="AUTH0 // SIMULATED SSO", font=fnt(7, mono=True),
+        tk.Label(left, text="LOCAL PROFILE // OFFLINE", font=fnt(7, mono=True),
                  bg=BG, fg=MUTED, anchor="w").pack(fill="x", padx=18,
                                                      pady=(4, 0))
         tk.Frame(left, bg=MUTED, height=1).pack(fill="x", padx=18, pady=(12, 8))
-        for scope in ("openid", "profile", "flight:read"):
+        for scope in ("callsign", "local record", "flight log"):
             row = tk.Frame(left, bg=BG)
             row.pack(fill="x", padx=18, pady=2)
             tk.Label(row, text="▪", font=fnt(8, mono=True), bg=BG,
@@ -942,18 +941,18 @@ class AuthScreen(Screen):
         inner = tk.Frame(right, bg=BG)
         inner.pack(fill="both", expand=True, padx=22, pady=20)
 
-        tk.Label(inner, text="SECURE LINK // LOCAL SIMULATION",
+        tk.Label(inner, text="LOCAL SESSION // OFFLINE",
                  font=fnt(8, mono=True), bg=BG, fg=MUTED,
                  anchor="w").pack(fill="x")
-        self.heading = tk.Label(inner, text=tracked("Crew authentication"),
+        self.heading = tk.Label(inner, text=tracked("Pilot check"),
                                 font=self.heading_font, bg=BG, fg=YELLOW,
                                 anchor="w")
         self.heading.pack(fill="x", pady=(6, 8))
         self.intro = tk.Label(
             inner,
-            text=("This is a simulated Auth0 login sequence. No account is "
-                  "created, no data is sent, and no network connection is "
-                  "opened. The token below is generated on this computer."),
+            text=("This is a local pilot check. No account is created, no data "
+                  "is sent, and no network connection is opened. The code below "
+                  "is generated on this computer."),
             font=fnt(9), bg=BG, fg=TEXT, anchor="w", justify="left",
             wraplength=420)
         self.intro.pack(fill="x")
@@ -967,7 +966,7 @@ class AuthScreen(Screen):
                                 fg=YELLOW, width=5, anchor="e")
         self.percent.pack(side="right", padx=(10, 0))
         self.status = tk.Label(inner,
-                               text="CONTACTING IDENTITY PROVIDER (SIMULATED)",
+                               text="PREPARING LOCAL PILOT PROFILE",
                                font=fnt(8, mono=True), bg=BG, fg=MUTED,
                                anchor="w")
         self.status.pack(fill="x")
@@ -997,7 +996,7 @@ class AuthScreen(Screen):
         token_inner = tk.Frame(token_panel, bg=BG)
         token_inner.pack(fill="x", padx=12, pady=8)
         self.token_head = tk.Label(token_inner,
-                                   text="SIMULATED SESSION TOKEN · PENDING",
+                                   text="LOCAL SESSION CODE · PENDING",
                                    font=fnt(7, mono=True), bg=BG, fg=MUTED,
                                    anchor="w")
         self.token_head.pack(fill="x")
@@ -1025,7 +1024,7 @@ class AuthScreen(Screen):
         self.art.create_text(12, 12, anchor="nw", text="LOCAL IDENTITY",
                              fill=YELLOW, font=fnt(7, "bold", mono=True),
                              tags="auth3d")
-        self.art.create_text(12, h - 12, anchor="sw", text="AUTH0 // SIMULATED",
+        self.art.create_text(12, h - 12, anchor="sw", text="LOCAL // OFFLINE",
                              fill=MUTED, font=fnt(7, mono=True),
                              tags="auth3d")
 
@@ -1038,7 +1037,7 @@ class AuthScreen(Screen):
         size = 18
         while size > 12:
             self.heading_font.configure(size=size)
-            if self.heading_font.measure(tracked("Crew authentication")) <= available:
+            if self.heading_font.measure(tracked("Pilot check")) <= available:
                 break
             size -= 1
 
@@ -1062,11 +1061,11 @@ class AuthScreen(Screen):
             else:
                 state.configure(text="WAIT", fg=MUTED)
         if fraction < 0.35:
-            self.status.configure(text="CONTACTING IDENTITY PROVIDER (SIMULATED)")
+            self.status.configure(text="PREPARING LOCAL PILOT PROFILE")
         elif fraction < 0.70:
-            self.status.configure(text="SIGNING LOCAL CLAIMS · NO NETWORK")
+            self.status.configure(text="READING LOCAL RECORD · NO NETWORK")
         else:
-            self.status.configure(text="ISSUING LOCAL SESSION TOKEN")
+            self.status.configure(text="ISSUING LOCAL SESSION CODE")
         self.draw_art()
         if self.step >= self.total:
             self.finish()
@@ -1078,16 +1077,16 @@ class AuthScreen(Screen):
             return
         self.finished = True
         seed = "{0}|{1}|{2}".format(self.app.callsign, time.time(), random.random())
-        self.token = "sim_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:40]
+        self.token = "pilot_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:40]
         self.progress = 1.0
         self.bar.set(1.0)
         self.percent.configure(text="100%")
         for state in self.check_states:
             state.configure(text="OK", fg=YELLOW)
         self.token_head.configure(
-            text="SIMULATED SESSION TOKEN · ISSUED LOCALLY", fg=YELLOW)
+            text="LOCAL SESSION CODE · ISSUED LOCALLY", fg=YELLOW)
         self.token_label.configure(text=self.token)
-        self.status.configure(text="SESSION ESTABLISHED (SIMULATED)", fg=YELLOW)
+        self.status.configure(text="LOCAL SESSION READY", fg=YELLOW)
         self.draw_art()
         self.continue_button.set_enabled(True)
 
@@ -2477,13 +2476,13 @@ class FinalScreen(Screen):
         panel_inner.pack(fill="both", expand=True, padx=12, pady=9)
         head = tk.Frame(panel_inner, bg=BG)
         head.pack(fill="x")
-        tk.Label(head, text=tracked("Tiger Data Hypertable"), font=fnt(7),
+        tk.Label(head, text=tracked("Local flight log"), font=fnt(7),
                  bg=BG, fg=TEXT, anchor="w").pack(side="left")
-        tk.Label(head, text="SIMULATION", font=fnt(8, mono=True), bg=BG,
+        tk.Label(head, text="LOCAL", font=fnt(8, mono=True), bg=BG,
                  fg=YELLOW, anchor="e").pack(side="right")
         self.note = tk.Label(
             panel_inner,
-            text=("Telemetry is written to a simulated hypertable on this machine. "
+            text=("Telemetry is written to the local flight log on this machine. "
                   "No network request is made and no data is uploaded."),
             font=fnt(8), bg=BG, fg=MUTED, anchor="w", justify="left",
             wraplength=390)
@@ -2537,7 +2536,7 @@ class FinalScreen(Screen):
         if step < 6:
             return "OPENING LOCAL WRITER"
         if step < 13:
-            return "CREATING HYPERTABLE flight_telemetry"
+            return "CREATING LOCAL FLIGHT LOG"
         if step < 20:
             return "WRITING TELEMETRY CHUNKS"
         if step < 26:

@@ -1,6 +1,6 @@
 """The Interstellar Driver's Ed: Rebel-SpaceX Flight Simulator.
 
-Single-file Tkinter desktop app built for MLH Hack Week.
+Tkinter desktop app built for MLH Hack Week.
 Auth0 and Tiger Data are simulated on this machine only: no network and
 no subprocesses. The app keeps one small pilot record in the user's home
 directory; nothing ever leaves the computer.
@@ -15,6 +15,15 @@ import time
 import tkinter as tk
 import tkinter.font as tkfont
 from pathlib import Path
+
+try:
+    import customtkinter as ctk
+except Exception:  # keeps the core game importable without the optional shell
+    ctk = None
+
+import dataviz
+import shipyard
+import visuals
 
 BG = "#000000"
 YELLOW = "#FFE81F"
@@ -39,6 +48,17 @@ def fnt(size, weight="normal", mono=False):
 def tracked(text):
     """Wide-spaced uppercase, used for titles and small labels."""
     return " ".join(text.upper())
+
+
+def set_root_bg(root):
+    """Apply the archive background to either a Tk or a CustomTk root."""
+    try:
+        root.configure(bg=BG)
+    except Exception:
+        try:
+            root.configure(fg_color=BG)
+        except Exception:
+            pass
 
 
 class PilotStore:
@@ -282,10 +302,6 @@ def score_text(score):
     return "SCORE {0:>4}".format(score)
 
 
-def points_text(points):
-    return "{0:+d} PTS".format(points)
-
-
 def option_rank(mission, option):
     """0 = best decision, 1 = partial, 2 = failure; used for difficulty."""
     best = max(item["points"] for item in mission["options"])
@@ -421,10 +437,151 @@ class ProgressBar(tk.Frame):
                                fill=YELLOW, outline="", tags="fill")
 
 
+class MetricChart(tk.Canvas):
+    """A small, dependency-free bar chart used by the flight debrief.
+
+    The chart is deliberately direct: one label, one value and one 0..limit
+    track per row, with a target tick where a target is meaningful. It uses the
+    same yellow/grey language as the rest of the simulator and redraws on
+    resize.
+    """
+
+    def __init__(self, parent, metrics=(), height=92, empty_text="NO TELEMETRY"):
+        tk.Canvas.__init__(self, parent, bg=BG, height=height, bd=0,
+                           highlightthickness=0, takefocus=0)
+        self.metrics = tuple(metrics)
+        self.empty_text = empty_text
+        self.bind("<Configure>", self.redraw)
+        self.redraw()
+
+    def redraw(self, _event=None):
+        c = self
+        c.delete("all")
+        width = c.winfo_width()
+        height = c.winfo_height()
+        if width < 2 or height < 2:
+            return
+        if not self.metrics:
+            c.create_text(width / 2, height / 2, text=self.empty_text,
+                          fill=MUTED, font=fnt(8, mono=True))
+            return
+        top = 2.0
+        row_height = (height - 4.0) / len(self.metrics)
+        for index, metric in enumerate(self.metrics):
+            y = top + index * row_height
+            tone = getattr(metric, "tone", "default")
+            value_colour = MUTED if tone == "bad" else (TEXT if tone == "warn" else YELLOW)
+            fill_colour = MUTED if tone == "bad" else (TEXT if tone == "warn" else YELLOW)
+            c.create_text(0, y + 1, anchor="nw", text=metric.label,
+                          fill=MUTED, font=fnt(8, mono=True))
+            c.create_text(width, y + 1, anchor="ne", text=metric.display,
+                          fill=value_colour, font=fnt(9, "bold", mono=True))
+            bar_y = y + max(16.0, row_height - 8.0)
+            c.create_rectangle(0, bar_y, width, bar_y + 5, outline=MUTED)
+            fill_end = max(0.0, min(width, width * metric.fraction))
+            if fill_end > 1.0:
+                c.create_rectangle(0, bar_y + 1, fill_end, bar_y + 4,
+                                   fill=fill_colour, outline="")
+            target = metric.target_fraction
+            if target is not None:
+                target_x = max(0.0, min(width, width * target))
+                c.create_line(target_x, bar_y - 2, target_x, bar_y + 7,
+                              fill=YELLOW)
+
+
+if ctk is not None:
+    class CtkFlatButton(ctk.CTkButton):
+        """CustomTkinter button that keeps the app's square, inverted hover."""
+
+        def __init__(self, parent, app, text, command, variant="outline",
+                     size=11, pady=10, padx=14):
+            self.app = app
+            self.variant = variant
+            self.command = command
+            self.enabled = True
+            self.hover = False
+            self.last_click = 0.0
+            height = max(32, int(size * 2 + pady * 2))
+            width = max(56, int(padx * 2 + len(str(text)) * max(6, size * 0.7)))
+            ctk.CTkButton.__init__(
+                self, parent, text=text, command=self.on_press,
+                width=width, height=height, corner_radius=0,
+                border_width=1, border_spacing=0, bg_color=BG,
+                fg_color=BG, hover=False, text_color=YELLOW,
+                text_color_disabled=MUTED, border_color=MUTED,
+                font=ctk.CTkFont(family=SANS, size=size, weight="bold"))
+            self.bind("<Enter>", self.on_enter)
+            self.bind("<Leave>", self.on_leave)
+            self.apply()
+
+        def apply(self):
+            if not self.enabled:
+                bg, fg, border = BG, MUTED, MUTED
+                state = "disabled"
+            elif self.variant == "primary":
+                bg, fg, border = (BG, YELLOW, YELLOW) if self.hover else (YELLOW, BG, YELLOW)
+                state = "normal"
+            else:
+                bg, fg, border = (YELLOW, BG, YELLOW) if self.hover else (BG, YELLOW, MUTED)
+                state = "normal"
+            self.configure(fg_color=bg, text_color=fg, border_color=border,
+                           state=state)
+
+        def set_enabled(self, enabled):
+            self.enabled = bool(enabled)
+            self.hover = False
+            self.apply()
+
+        def on_enter(self, _event=None):
+            if self.enabled and not self.hover:
+                self.hover = True
+                self.apply()
+
+        def on_leave(self, _event=None):
+            if self.hover:
+                self.hover = False
+                self.apply()
+
+        def on_press(self):
+            if not self.enabled:
+                return
+            now = time.monotonic()
+            if now - self.last_click < 0.25:
+                return
+            self.last_click = now
+            if self.command is not None:
+                self.command()
+
+    class CtkProgressBar(ctk.CTkProgressBar):
+        def __init__(self, parent, app, height=10):
+            ctk.CTkProgressBar.__init__(
+                self, parent, height=height, corner_radius=0, border_width=1,
+                bg_color=BG, fg_color=BG, border_color=MUTED,
+                progress_color=YELLOW)
+            self.app = app
+            self.set(0.0)
+
+    FlatButton = CtkFlatButton
+    ProgressBar = CtkProgressBar
+
+
 class Screen(tk.Frame):
     def __init__(self, parent, app):
         tk.Frame.__init__(self, parent, bg=BG)
         self.app = app
+        self.backdrop = tk.Canvas(self, bg=BG, bd=0, highlightthickness=0,
+                                  takefocus=0)
+        self.backdrop.place(x=0, y=0, relwidth=1, relheight=1)
+        self.backdrop.bind("<Configure>", self.paint_backdrop)
+
+    def paint_backdrop(self, event=None):
+        try:
+            width = event.width if event is not None else self.backdrop.winfo_width()
+            height = event.height if event is not None else self.backdrop.winfo_height()
+            if width > 4 and height > 4:
+                visuals.draw_backdrop(self.backdrop, width, height)
+        except Exception:
+            pass
 
     def g(self, fn):
         return self.app.guard(fn)
@@ -437,56 +594,146 @@ class TitleScreen(Screen):
         self.height = 1
         self.fitted_width = -1
         self.stars = []
-        self.title_font = tkfont.Font(family=SANS, size=54, weight="bold")
+        self.presentation_panel = None
+        self.title_font_a = tkfont.Font(family=SANS, size=42, weight="bold")
+        self.title_font_b = tkfont.Font(family=SANS, size=56, weight="bold")
 
         self.canvas = tk.Canvas(self, bg=BG, bd=0, highlightthickness=0)
         self.canvas.place(x=0, y=0, relwidth=1, relheight=1)
 
         self.content = tk.Frame(self, bg=BG)
-        self.content.place(relx=0.5, rely=0.47, anchor="center")
+        self.content.place(relx=0.5, rely=0.51, anchor="center", relwidth=0.88)
+        self.content.columnconfigure(0, weight=3)
+        self.content.columnconfigure(1, weight=2)
 
-        tk.Label(self.content, text=tracked("Rebel Aerospace Academy"),
-                 font=fnt(8), bg=BG, fg=MUTED).pack()
-        self.title_label = tk.Label(self.content,
-                                    text=tracked("The Interstellar Driver's Ed"),
-                                    font=self.title_font, bg=BG, fg=YELLOW)
-        self.title_label.pack(pady=(10, 8))
-        tk.Label(self.content, text=tracked("Rebel-SpaceX Flight Simulator"),
-                 font=fnt(9), bg=BG, fg=TEXT).pack()
-        tk.Frame(self.content, bg=MUTED, height=1).pack(fill="x", pady=22)
+        hero = tk.Frame(self.content, bg=BG)
+        hero.grid(row=0, column=0, sticky="nsew", padx=(0, 32))
 
-        form = tk.Frame(self.content, bg=BG)
-        form.pack()
-        tk.Label(form, text=tracked("Callsign"), font=fnt(8), bg=BG, fg=MUTED,
+        top = tk.Frame(hero, bg=BG)
+        top.pack(fill="x")
+        tk.Label(top, text=tracked("Rebel Aerospace Academy"),
+                 font=fnt(8), bg=BG, fg=MUTED, anchor="w").pack(side="left")
+        tk.Label(top, text="SECTOR 07 / KAMINO", font=fnt(8, mono=True),
+                 bg=BG, fg=MUTED, anchor="e").pack(side="right")
+
+        index_row = tk.Frame(hero, bg=BG)
+        index_row.pack(fill="x", pady=(16, 0))
+        tk.Label(index_row, text="01", font=fnt(15, "bold", mono=True),
+                 bg=BG, fg=YELLOW).pack(side="left")
+        tk.Frame(index_row, bg=MUTED, height=1).pack(side="left", fill="x",
+                                                       expand=True, padx=10)
+        tk.Label(index_row, text=tracked("Pilot induction"),
+                 font=fnt(8), bg=BG, fg=MUTED).pack(side="right")
+
+        title_a = tk.Label(hero, text="THE INTERSTELLAR",
+                           font=self.title_font_a, bg=BG, fg=YELLOW, anchor="w")
+        title_a.pack(fill="x", pady=(10, 0))
+        title_b = tk.Label(hero, text="DRIVER'S ED",
+                           font=self.title_font_b, bg=BG, fg=YELLOW, anchor="w")
+        title_b.pack(fill="x", pady=(0, 8))
+        self.title_labels = (title_a, title_b)
+
+        tk.Label(hero, text="REBEL-SPACEX FLIGHT SIMULATOR",
+                 font=fnt(10, "bold", mono=True), bg=BG, fg=TEXT,
                  anchor="w").pack(fill="x")
-        self.entry = tk.Entry(form, font=fnt(12, mono=True), bg=BG, fg=YELLOW,
-                              insertbackground=YELLOW, relief="flat", bd=0,
-                              highlightthickness=1, highlightbackground=MUTED,
-                              highlightcolor=YELLOW, width=26, justify="center")
-        self.entry.pack(fill="x", pady=(6, 6), ipady=5)
-        self.entry.insert(0, app.callsign or app.pilot.last_callsign or "CADET-X")
-        self.hint = tk.Label(self.content,
-                             text=("Letters, digits, spaces, hyphens, underscores"
-                                   " · 1-20 characters"),
-                             font=fnt(8), bg=BG, fg=MUTED)
-        self.hint.pack()
+        tk.Label(hero,
+                 text=("Three missions through the edge of the atmosphere. "
+                       "Trim the stack, land the booster, cross the debris field."),
+                 font=fnt(10), bg=BG, fg=MUTED, anchor="w",
+                 justify="left", wraplength=440).pack(fill="x", pady=(10, 0))
 
-        actions = tk.Frame(self.content, bg=BG)
-        actions.pack(pady=(22, 0))
-        FlatButton(actions, app, "START MISSION", self.g(self.start),
-                   "primary", size=10, padx=24, pady=10).pack(side="left",
-                                                              padx=(0, 10))
-        FlatButton(actions, app, "QUIT", self.g(app.close),
-                   "outline", size=10, padx=24, pady=10).pack(side="left")
+        stats = tk.Frame(hero, bg=BG)
+        stats.pack(fill="x", pady=(18, 0))
+        for value, caption in (("03", "MISSIONS"), ("390", "MAX PTS"),
+                               ("LOCAL", "DATA")):
+            chip = tk.Frame(stats, bg=BG, highlightthickness=1,
+                            highlightbackground=MUTED)
+            chip.pack(side="left", padx=(0, 8))
+            inner_chip = tk.Frame(chip, bg=BG)
+            inner_chip.pack(padx=10, pady=7)
+            tk.Label(inner_chip, text=value, font=fnt(12, "bold", mono=True),
+                     bg=BG, fg=YELLOW).pack(anchor="w")
+            tk.Label(inner_chip, text=caption, font=fnt(7, mono=True),
+                     bg=BG, fg=MUTED).pack(anchor="w")
 
-        if app.pilot.flights:
-            record = "PILOT RECORD · BEST {0:03d} · {1} FLIGHT{2}".format(
-                app.pilot.best_score, app.pilot.flights,
-                "" if app.pilot.flights == 1 else "S")
+        tk.Label(hero,
+                 text="↑↓ TRIM  ·  SPACE BURN  ·  ←→ STEER  ·  F11 FULLSCREEN",
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                 anchor="w").pack(fill="x", pady=(20, 0))
+
+        panel = tk.Frame(self.content, bg=BG, highlightthickness=1,
+                         highlightbackground=MUTED)
+        panel.grid(row=0, column=1, sticky="nsew")
+        inner = tk.Frame(panel, bg=BG)
+        inner.pack(fill="both", expand=True, padx=20, pady=18)
+
+        head = tk.Frame(inner, bg=BG)
+        head.pack(fill="x")
+        tk.Label(head, text=tracked("Pilot access"), font=fnt(8, "bold"),
+                 bg=BG, fg=TEXT, anchor="w").pack(side="left")
+        tk.Label(head, text="READY", font=fnt(8, mono=True),
+                 bg=BG, fg=YELLOW, anchor="e").pack(side="right")
+        tk.Frame(inner, bg=MUTED, height=1).pack(fill="x", pady=(10, 14))
+
+        tk.Label(inner, text="CALLSIGN", font=fnt(8, mono=True),
+                 bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+        if ctk is not None:
+            self.entry = ctk.CTkEntry(
+                inner, width=260, height=40, corner_radius=0, border_width=1,
+                bg_color=BG, fg_color=BG, border_color=MUTED,
+                text_color=YELLOW, font=ctk.CTkFont(family=MONO, size=13),
+                justify="center")
+            self.entry.pack(fill="x", pady=(6, 4))
+            self.entry.bind("<FocusIn>",
+                            lambda _event: self.entry.configure(border_color=YELLOW))
+            self.entry.bind("<FocusOut>",
+                            lambda _event: self.entry.configure(border_color=MUTED))
         else:
-            record = "NO FLIGHTS LOGGED · YOUR RECORD STARTS HERE"
-        tk.Label(self.content, text=record, font=fnt(8, mono=True),
-                 bg=BG, fg=MUTED).pack(pady=(18, 0))
+            self.entry = tk.Entry(inner, font=fnt(12, mono=True), bg=BG,
+                                  fg=YELLOW, insertbackground=YELLOW,
+                                  relief="flat", bd=0, highlightthickness=1,
+                                  highlightbackground=MUTED,
+                                  highlightcolor=YELLOW, width=26,
+                                  justify="center")
+            self.entry.pack(fill="x", pady=(6, 4), ipady=5)
+        self.entry.insert(0, app.callsign or app.pilot.last_callsign or "CADET-X")
+        self.hint = tk.Label(inner, text="LOCAL PROFILE · 1–20 CHARACTERS",
+                             font=fnt(7, mono=True), bg=BG, fg=MUTED,
+                             anchor="w")
+        self.hint.pack(fill="x")
+
+        FlatButton(inner, app, "START MISSION", self.g(self.start),
+                   "primary", size=10, padx=18, pady=9).pack(fill="x",
+                                                               pady=(14, 7))
+        actions = tk.Frame(inner, bg=BG)
+        actions.pack(fill="x")
+        FlatButton(actions, app, "HANGAR", self.g(app.show_hangar),
+                   "outline", size=8, padx=8, pady=7).pack(
+                       side="left", fill="x", expand=True, padx=(0, 6))
+        FlatButton(actions, app, "QUIT", self.g(app.close), "outline",
+                   size=8, padx=8, pady=7).pack(side="left", fill="x",
+                                                expand=True)
+        FlatButton(inner, app, "PRESENTATION · JUMP TO MISSION",
+                   self.g(self.show_presentation), "outline",
+                   size=8, padx=8, pady=7).pack(fill="x", pady=(7, 0))
+
+        tk.Frame(inner, bg=MUTED, height=1).pack(fill="x", pady=(16, 12))
+        tk.Label(inner, text=tracked("Pilot record"), font=fnt(7, mono=True),
+                 bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+        record_rows = (
+            ("BEST SCORE", "{0:03d}".format(app.pilot.best_score)),
+            ("FLIGHTS", "{0:02d}".format(app.pilot.flights)),
+            ("BEST RANK", app.pilot.best_rank or "UNRANKED"),
+        )
+        for caption, value in record_rows:
+            row = tk.Frame(inner, bg=BG)
+            row.pack(fill="x", pady=(6, 0))
+            tk.Label(row, text=caption, font=fnt(8, mono=True), bg=BG,
+                     fg=MUTED, anchor="w").pack(side="left")
+            tk.Label(row, text=value, font=fnt(9, "bold", mono=True), bg=BG,
+                     fg=TEXT, anchor="e").pack(side="right")
+        tk.Label(inner, text="LOCAL JSON · NO NETWORK", font=fnt(7, mono=True),
+                 bg=BG, fg=MUTED, anchor="w").pack(fill="x", pady=(14, 0))
 
         self.canvas.bind("<Configure>", self.g(self.on_resize))
         self.entry.bind("<Return>", self.g(self.start))
@@ -494,7 +741,7 @@ class TitleScreen(Screen):
         self.app.schedule(60, self.tick)
         self.app.schedule(120, self.entry.focus_set)
 
-    # -- starfield -----------------------------------------------------
+    # -- starfield and station art ------------------------------------
     def make_star(self):
         return {
             "x": random.random(),
@@ -516,16 +763,35 @@ class TitleScreen(Screen):
         if abs(self.width - self.fitted_width) > 16:
             self.fitted_width = self.width
             self.fit_title()
+        self.draw_art()
         self.draw_stars()
 
     def fit_title(self):
-        text = tracked("The Interstellar Driver's Ed")
-        limit = max(260, self.width - 150)
-        size = 54
-        self.title_font.configure(size=size)
-        while size > 14 and self.title_font.measure(text) > limit:
-            size -= 1
-            self.title_font.configure(size=size)
+        limit = max(280, min(520, int(self.width * 0.42)))
+        for font, text, base in ((self.title_font_a, "THE INTERSTELLAR", 42),
+                                 (self.title_font_b, "DRIVER'S ED", 56)):
+            size = base
+            font.configure(size=size)
+            while size > 18 and font.measure(text) > limit:
+                size -= 1
+                font.configure(size=size)
+
+    def draw_art(self):
+        c = self.canvas
+        c.delete("all")
+        if self.width < 40 or self.height < 40:
+            return
+        w, h = self.width, self.height
+        visuals.draw_orbit(c, w * 0.82, h * 0.24, min(w, h) * 0.34,
+                           min(w, h) * 0.21, visuals.GRID, (2, 10))
+        visuals.draw_planet(c, w * 0.84, h * 0.20, min(w, h) * 0.19, MUTED)
+        visuals.draw_star_destroyer(c, w * 0.20, h * 0.07,
+                                    min(w, h) * 0.10, MUTED)
+        visuals.draw_xwing(c, w * 0.12, h * 0.79, min(w, h) * 0.075, MUTED)
+        visuals.draw_corner_marks(c, 22, 22, w - 22, h - 22, MUTED, 18)
+        c.create_text(w - 26, h - 42, anchor="se",
+                      text="LOCAL FLIGHT OPERATIONS // 01",
+                      fill=MUTED, font=fnt(7, mono=True), tags="art")
 
     def draw_stars(self):
         c = self.canvas
@@ -555,11 +821,55 @@ class TitleScreen(Screen):
         self.draw_stars()
         self.app.schedule(33, self.tick)
 
+    # -- presentation mode --------------------------------------------
+    def show_presentation(self):
+        if self.presentation_panel is not None:
+            return
+        panel = tk.Frame(self, bg=BG)
+        panel.place(x=0, y=0, relwidth=1, relheight=1)
+        panel.lift()
+        card = tk.Frame(panel, bg=BG, highlightthickness=1,
+                        highlightbackground=YELLOW)
+        card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.66)
+        inner = tk.Frame(card, bg=BG)
+        inner.pack(fill="both", expand=True, padx=24, pady=20)
+        tk.Label(inner, text=tracked("Presentation mode"),
+                 font=fnt(16, "bold"), bg=BG, fg=YELLOW,
+                 anchor="w").pack(fill="x")
+        tk.Label(inner,
+                 text="JUMP STRAIGHT TO A MISSION · DEMO SCORE IS NOT SAVED",
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                 anchor="w", justify="left", wraplength=520).pack(
+                     fill="x", pady=(5, 14))
+        for index, mission in enumerate(MISSIONS):
+            FlatButton(inner, self.app,
+                       "MISSION 0{0} · {1}".format(index + 1, mission["tag"]),
+                       self.g(lambda choice=index: self.app.begin_presentation(choice)),
+                       "primary" if index == 0 else "outline",
+                       size=9, padx=12, pady=8).pack(fill="x", pady=(0, 7))
+        FlatButton(inner, self.app, "BACK TO TITLE",
+                   self.g(self.hide_presentation), "outline",
+                   size=8, padx=12, pady=7).pack(anchor="e", pady=(6, 0))
+        self.presentation_panel = panel
+
+    def hide_presentation(self):
+        if self.presentation_panel is None:
+            return
+        try:
+            self.presentation_panel.destroy()
+        except Exception:
+            pass
+        self.presentation_panel = None
+
+    def on_key(self, name, pressed):
+        if name == "pause" and pressed:
+            self.hide_presentation()
+
     # -- actions -------------------------------------------------------
     def start(self, _event=None):
         callsign, error = validate_callsign(self.entry.get())
         if callsign is None:
-            self.hint.configure(text=error, fg=YELLOW)
+            self.hint.configure(text=error.upper(), fg=YELLOW)
             self.entry.focus_set()
             return
         self.app.callsign = callsign
@@ -567,14 +877,7 @@ class TitleScreen(Screen):
 
 
 class AuthScreen(Screen):
-    LOG = (
-        "[01] opening simulated authorization window",
-        "[02] scope: openid profile flight:read",
-        "[03] response_type=token · audience=rebel-academy",
-        "[04] signing claims on this device · no network",
-        "[05] issuing simulated credential",
-        "[06] session established",
-    )
+    CHECKS = ("AUTHORIZATION WINDOW", "LOCAL CLAIMS", "SESSION TOKEN")
 
     def __init__(self, parent, app):
         Screen.__init__(self, parent, app)
@@ -582,59 +885,136 @@ class AuthScreen(Screen):
         self.total = 26
         self.finished = False
         self.token = ""
+        self.progress = 0.0
+        self.heading_font = tkfont.Font(family=SANS, size=18, weight="bold")
 
         holder = tk.Frame(self, bg=BG)
         holder.pack(fill="both", expand=True)
-        self.card = tk.Frame(holder, bg=BG, bd=0, highlightthickness=1,
+        self.card = tk.Frame(holder, bg=BG, highlightthickness=1,
                              highlightbackground=MUTED)
-        self.card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.72)
-        inner = tk.Frame(self.card, bg=BG)
-        inner.pack(fill="both", expand=True, padx=26, pady=22)
+        self.card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.84)
 
-        tk.Label(inner, text=tracked("Secure link · Auth0"), font=fnt(8),
-                 bg=BG, fg=MUTED, anchor="w").pack(fill="x")
-        tk.Label(inner, text=tracked("Crew authentication"), font=fnt(17, "bold"),
-                 bg=BG, fg=YELLOW, anchor="w").pack(fill="x", pady=(6, 10))
+        body = tk.Frame(self.card, bg=BG)
+        body.pack(fill="both", expand=True)
 
+        left = tk.Frame(body, bg=BG, width=250)
+        left.pack(side="left", fill="y")
+        left.pack_propagate(False)
+        self.art = tk.Canvas(left, bg=BG, height=246, bd=0,
+                             highlightthickness=0, takefocus=0)
+        self.art.pack(fill="x")
+        self.art.bind("<Configure>", self.g(self.draw_art))
+        tk.Label(left, text=tracked("Local identity"), font=fnt(8),
+                 bg=BG, fg=TEXT, anchor="w").pack(fill="x", padx=18)
+        tk.Label(left, text="AUTH0 // SIMULATED SSO", font=fnt(7, mono=True),
+                 bg=BG, fg=MUTED, anchor="w").pack(fill="x", padx=18,
+                                                     pady=(4, 0))
+        tk.Frame(left, bg=MUTED, height=1).pack(fill="x", padx=18, pady=(12, 8))
+        for scope in ("openid", "profile", "flight:read"):
+            row = tk.Frame(left, bg=BG)
+            row.pack(fill="x", padx=18, pady=2)
+            tk.Label(row, text="▪", font=fnt(8, mono=True), bg=BG,
+                     fg=YELLOW).pack(side="left")
+            tk.Label(row, text=scope, font=fnt(8, mono=True), bg=BG,
+                     fg=MUTED).pack(side="left", padx=(7, 0))
+
+        right = tk.Frame(body, bg=BG)
+        right.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(right, bg=BG)
+        inner.pack(fill="both", expand=True, padx=22, pady=20)
+
+        tk.Label(inner, text="SECURE LINK // LOCAL SIMULATION",
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                 anchor="w").pack(fill="x")
+        self.heading = tk.Label(inner, text=tracked("Crew authentication"),
+                                font=self.heading_font, bg=BG, fg=YELLOW,
+                                anchor="w")
+        self.heading.pack(fill="x", pady=(6, 8))
         self.intro = tk.Label(
             inner,
-            text=("This is a simulated Auth0 login sequence. No account is created, "
-                  "no data is sent, and no network connection is opened. The token "
-                  "below is generated on this computer and is not a real credential."),
-            font=fnt(10), bg=BG, fg=TEXT, anchor="w", justify="left", wraplength=520)
+            text=("This is a simulated Auth0 login sequence. No account is "
+                  "created, no data is sent, and no network connection is "
+                  "opened. The token below is generated on this computer."),
+            font=fnt(9), bg=BG, fg=TEXT, anchor="w", justify="left",
+            wraplength=420)
         self.intro.pack(fill="x")
 
-        self.bar = ProgressBar(inner, app, 10)
-        self.bar.pack(fill="x", pady=(18, 8))
-
+        progress_row = tk.Frame(inner, bg=BG)
+        progress_row.pack(fill="x", pady=(16, 4))
+        self.bar = ProgressBar(progress_row, app, 10)
+        self.bar.pack(side="left", fill="x", expand=True)
+        self.percent = tk.Label(progress_row, text="000%",
+                                font=fnt(9, "bold", mono=True), bg=BG,
+                                fg=YELLOW, width=5, anchor="e")
+        self.percent.pack(side="right", padx=(10, 0))
         self.status = tk.Label(inner,
                                text="CONTACTING IDENTITY PROVIDER (SIMULATED)",
-                               font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w")
+                               font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                               anchor="w")
         self.status.pack(fill="x")
 
-        self.log = tk.Label(inner, text="", font=fnt(9, mono=True), bg=BG, fg=TEXT,
-                            anchor="nw", justify="left", height=6, wraplength=520)
-        self.log.pack(fill="x", pady=(10, 0))
+        check_panel = tk.Frame(inner, bg=BG, highlightthickness=1,
+                               highlightbackground=MUTED)
+        check_panel.pack(fill="x", pady=(12, 0))
+        checks_inner = tk.Frame(check_panel, bg=BG)
+        checks_inner.pack(fill="x", padx=12, pady=8)
+        self.check_states = []
+        for index, name in enumerate(self.CHECKS):
+            row = tk.Frame(checks_inner, bg=BG)
+            row.pack(fill="x", pady=2)
+            tk.Label(row, text="0{0}".format(index + 1),
+                     font=fnt(8, mono=True), bg=BG, fg=MUTED,
+                     width=3, anchor="w").pack(side="left")
+            tk.Label(row, text=name, font=fnt(8, mono=True), bg=BG,
+                     fg=TEXT, anchor="w").pack(side="left")
+            state = tk.Label(row, text="WAIT", font=fnt(8, "bold", mono=True),
+                             bg=BG, fg=MUTED, anchor="e")
+            state.pack(side="right")
+            self.check_states.append(state)
 
-        self.token_label = tk.Label(inner, text="SIMULATED TOKEN · pending",
-                                    font=fnt(8, mono=True), bg=BG, fg=MUTED,
-                                    anchor="w", justify="left", wraplength=520)
-        self.token_label.pack(fill="x", pady=(10, 0))
+        token_panel = tk.Frame(inner, bg=BG, highlightthickness=1,
+                               highlightbackground=MUTED)
+        token_panel.pack(fill="x", pady=(10, 0))
+        token_inner = tk.Frame(token_panel, bg=BG)
+        token_inner.pack(fill="x", padx=12, pady=8)
+        self.token_head = tk.Label(token_inner,
+                                   text="SIMULATED SESSION TOKEN · PENDING",
+                                   font=fnt(7, mono=True), bg=BG, fg=MUTED,
+                                   anchor="w")
+        self.token_head.pack(fill="x")
+        self.token_label = tk.Label(token_inner, text="—",
+                                    font=fnt(8, mono=True), bg=BG, fg=TEXT,
+                                    anchor="w", justify="left", wraplength=400)
+        self.token_label.pack(fill="x", pady=(4, 0))
 
         self.continue_button = FlatButton(inner, app, "ENTER THE COCKPIT",
                                           self.g(self.proceed), "primary",
                                           size=10, padx=18, pady=8)
-        self.continue_button.pack(anchor="e", pady=(18, 0))
+        self.continue_button.pack(anchor="e", pady=(14, 0))
         self.continue_button.set_enabled(False)
 
         self.card.bind("<Configure>", self.g(self.on_resize))
         self.app.schedule(280, self.advance)
 
+    def draw_art(self, _event=None):
+        w = self.art.winfo_width()
+        h = self.art.winfo_height()
+        if w < 20 or h < 20:
+            return
+        visuals.draw_auth_art(self.art, w, h, self.progress, fnt(7, mono=True))
+
     def on_resize(self, event):
         width = max(240, event.width - 64)
-        self.intro.configure(wraplength=width)
-        self.log.configure(wraplength=width)
-        self.token_label.configure(wraplength=width)
+        self.intro.configure(wraplength=min(420, width))
+        self.token_label.configure(wraplength=min(420, width))
+        # The tracked heading must fit inside the right column at 900px too.
+        available = max(220, event.width - 294)
+        size = 18
+        while size > 12:
+            self.heading_font.configure(size=size)
+            if self.heading_font.measure(tracked("Crew authentication")) <= available:
+                break
+            size -= 1
 
     def advance(self):
         if not self.winfo_exists() or self.finished:
@@ -644,16 +1024,24 @@ class AuthScreen(Screen):
             return
         self.step += 1
         fraction = self.step / float(self.total)
+        self.progress = fraction
         self.bar.set(fraction)
-        shown = int(round(len(self.LOG) * fraction))
-        if shown > 0:
-            self.log.configure(text="\n".join(self.LOG[:shown]))
+        self.percent.configure(text="{0:03d}%".format(int(round(fraction * 100))))
+        blocked = 0 if fraction < 0.30 else (1 if fraction < 0.65 else 2)
+        for index, state in enumerate(self.check_states):
+            if index < blocked:
+                state.configure(text="OK", fg=YELLOW)
+            elif index == blocked:
+                state.configure(text="ACTIVE", fg=TEXT)
+            else:
+                state.configure(text="WAIT", fg=MUTED)
         if fraction < 0.35:
             self.status.configure(text="CONTACTING IDENTITY PROVIDER (SIMULATED)")
         elif fraction < 0.70:
-            self.status.configure(text="EXCHANGING SIMULATED CLAIMS")
+            self.status.configure(text="SIGNING LOCAL CLAIMS · NO NETWORK")
         else:
-            self.status.configure(text="VERIFYING LOCAL SESSION")
+            self.status.configure(text="ISSUING LOCAL SESSION TOKEN")
+        self.draw_art()
         if self.step >= self.total:
             self.finish()
             return
@@ -665,16 +1053,138 @@ class AuthScreen(Screen):
         self.finished = True
         seed = "{0}|{1}|{2}".format(self.app.callsign, time.time(), random.random())
         self.token = "sim_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:40]
+        self.progress = 1.0
         self.bar.set(1.0)
-        self.log.configure(text="\n".join(self.LOG))
-        self.token_label.configure(text="SIMULATED TOKEN · " + self.token)
+        self.percent.configure(text="100%")
+        for state in self.check_states:
+            state.configure(text="OK", fg=YELLOW)
+        self.token_head.configure(
+            text="SIMULATED SESSION TOKEN · ISSUED LOCALLY", fg=YELLOW)
+        self.token_label.configure(text=self.token)
         self.status.configure(text="SESSION ESTABLISHED (SIMULATED)", fg=YELLOW)
+        self.draw_art()
         self.continue_button.set_enabled(True)
 
     def proceed(self):
         if not self.finished:
             return
         self.app.start_missions()
+
+
+class ChoiceCard(tk.Frame):
+    """A clickable flight-plan card with rank, points and a hover state."""
+
+    def __init__(self, parent, app, number, label, points, rank, command):
+        tk.Frame.__init__(self, parent, bg=BG, bd=0,
+                          highlightthickness=1, highlightbackground=MUTED,
+                          highlightcolor=MUTED)
+        self.app = app
+        self.command = command
+        self.enabled = False
+        self.hover = False
+        self.last_click = 0.0
+
+        self.inner = tk.Frame(self, bg=BG)
+        self.inner.pack(fill="both", expand=True, padx=10, pady=8)
+
+        self.number_box = tk.Frame(self.inner, bg=BG, width=38, height=38,
+                                   highlightthickness=1,
+                                   highlightbackground=MUTED)
+        self.number_box.pack(side="left")
+        self.number_box.pack_propagate(False)
+        self.number_label = tk.Label(self.number_box, text=str(number),
+                                     font=fnt(13, "bold", mono=True),
+                                     bg=BG, fg=YELLOW)
+        self.number_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        self.copy = tk.Frame(self.inner, bg=BG)
+        self.copy.pack(side="left", fill="x", expand=True, padx=(12, 8))
+        self.title_label = tk.Label(self.copy, text=label,
+                                    font=fnt(10, "bold"), bg=BG, fg=YELLOW,
+                                    anchor="w", justify="left")
+        self.title_label.pack(fill="x")
+        self.meta_label = tk.Label(
+            self.copy, text="DECISION {0:+d}  ·  {1}".format(points, rank),
+            font=fnt(7, mono=True), bg=BG, fg=MUTED, anchor="w")
+        self.meta_label.pack(fill="x", pady=(3, 0))
+
+        self.arrow = tk.Label(self.inner, text="→", font=fnt(15, "bold"),
+                              bg=BG, fg=YELLOW)
+
+        self.arrow.pack(side="right")
+        self.widgets = (self, self.inner, self.number_box, self.number_label,
+                        self.copy, self.title_label, self.meta_label,
+                        self.arrow)
+        for widget in self.widgets:
+            widget.bind("<Button-1>", self.on_press)
+            widget.bind("<Enter>", self.on_enter)
+            widget.bind("<Leave>", self.on_leave)
+        self.apply()
+
+    def apply(self):
+        if not self.enabled:
+            bg, fg, border = BG, MUTED, MUTED
+            number_bg, number_fg, meta = BG, MUTED, MUTED
+        elif self.hover:
+            bg, fg, border = YELLOW, BG, YELLOW
+            number_bg, number_fg, meta = BG, YELLOW, BG
+        else:
+            bg, fg, border = BG, YELLOW, MUTED
+            number_bg, number_fg, meta = BG, YELLOW, MUTED
+        self.configure(bg=bg, highlightbackground=border, highlightcolor=border)
+        self.inner.configure(bg=bg)
+        self.copy.configure(bg=bg)
+        self.number_box.configure(bg=bg, highlightbackground=border,
+                                  highlightcolor=border)
+        self.number_label.configure(bg=number_bg, fg=number_fg)
+        self.title_label.configure(bg=bg, fg=fg)
+        self.meta_label.configure(bg=bg, fg=meta)
+        self.arrow.configure(bg=bg, fg=fg)
+        try:
+            cursor = "hand2" if self.enabled else "arrow"
+            for widget in self.widgets:
+                widget.configure(cursor=cursor)
+        except tk.TclError:
+            pass
+
+    def set_enabled(self, enabled):
+        self.enabled = bool(enabled)
+        self.hover = False
+        self.apply()
+
+    def _contains(self, widget):
+        while widget is not None:
+            if widget is self:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
+
+    def on_enter(self, _event=None):
+        if self.enabled and not self.hover:
+            self.hover = True
+            self.apply()
+
+    def on_leave(self, event=None):
+        inside = False
+        if event is not None:
+            try:
+                inside = self._contains(self.winfo_containing(event.x_root,
+                                                               event.y_root))
+            except Exception:
+                inside = False
+        if not inside and self.hover:
+            self.hover = False
+            self.apply()
+
+    def on_press(self, _event=None):
+        if not self.enabled:
+            return
+        now = time.monotonic()
+        if now - self.last_click < 0.25:
+            return
+        self.last_click = now
+        if self.command is not None:
+            self.command()
 
 
 class MissionScreen(Screen):
@@ -699,19 +1209,38 @@ class MissionScreen(Screen):
         tk.Label(bar, text="MISSION {0:02d} / 03 · {1}".format(
             self.index + 1, self.mission["tag"]),
             font=fnt(9, "bold", mono=True), bg=BG, fg=MUTED).pack(side="left")
+        if self.app.presentation:
+            tk.Label(bar, text="PRESENTATION", font=fnt(8, "bold", mono=True),
+                     bg=BG, fg=YELLOW).pack(side="left", padx=(12, 0))
         self.score_label = tk.Label(bar, text=score_text(self.app.score),
-                                    font=fnt(9, "bold", mono=True), bg=BG, fg=YELLOW)
+                                    font=fnt(9, "bold", mono=True), bg=BG,
+                                    fg=YELLOW)
         self.score_label.pack(side="right")
+        self.pips = tk.Canvas(bar, width=62, height=8, bg=BG, bd=0,
+                              highlightthickness=0, takefocus=0)
+        self.pips.pack(side="right", padx=(0, 16))
+        for i in range(3):
+            fill = YELLOW if i < self.index else (TEXT if i == self.index else BG)
+            self.pips.create_rectangle(i * 20 + 1, 1, i * 20 + 17, 7,
+                                       fill=fill, outline=MUTED)
+        tk.Label(bar, text="BRIEFING", font=fnt(8, "bold", mono=True),
+                 bg=BG, fg=TEXT).pack(side="right", padx=(0, 16))
         tk.Frame(self, bg=MUTED, height=1).pack(fill="x", padx=28, pady=(10, 0))
 
         body = tk.Frame(self, bg=BG)
-        body.pack(fill="both", expand=True, padx=28, pady=16)
+        body.pack(fill="both", expand=True, padx=28, pady=14)
         body.columnconfigure(0, weight=5, minsize=240)
         body.columnconfigure(1, weight=7, minsize=320)
         body.rowconfigure(0, weight=1)
 
         left = tk.Frame(body, bg=BG)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 22))
+        art_head = tk.Frame(left, bg=BG)
+        art_head.pack(fill="x", pady=(0, 7))
+        tk.Label(art_head, text="OPTICAL FEED // 0{0}".format(self.index + 1),
+                 font=fnt(7, mono=True), bg=BG, fg=MUTED).pack(side="left")
+        tk.Label(art_head, text="LOCAL RENDER", font=fnt(7, mono=True),
+                 bg=BG, fg=YELLOW).pack(side="right")
         self.art = tk.Canvas(left, bg=BG, width=320, height=320, bd=0,
                              highlightthickness=1, highlightbackground=MUTED)
         self.art.pack(fill="both", expand=True)
@@ -720,25 +1249,49 @@ class MissionScreen(Screen):
 
         self.right = tk.Frame(body, bg=BG)
         self.right.grid(row=0, column=1, sticky="nsew")
+        tk.Label(self.right, text="MISSION {0:02d} / 03  ·  FLIGHT PLAN".format(
+            self.index + 1), font=fnt(8, mono=True), bg=BG, fg=MUTED,
+            anchor="w").pack(fill="x")
         self.title_label = tk.Label(self.right, text=self.mission["title"],
                                     font=fnt(17, "bold"), bg=BG, fg=YELLOW,
                                     anchor="w", justify="left", wraplength=460)
-        self.title_label.pack(fill="x")
-        self.text = tk.Label(self.right, text="", font=fnt(11), bg=BG, fg=TEXT,
+        self.title_label.pack(fill="x", pady=(5, 7))
+
+        meta = tk.Frame(self.right, bg=BG)
+        meta.pack(fill="x", pady=(0, 8))
+        max_points = max(option["points"] for option in self.mission["options"])
+        for caption, value in (("THREAT", ("LOW", "MEDIUM", "HIGH")[self.index]),
+                               ("DECISION CAP", "+{0}".format(max_points)),
+                               ("FLIGHT BONUS", "+30")):
+            chip = tk.Frame(meta, bg=BG, highlightthickness=1,
+                            highlightbackground=MUTED)
+            chip.pack(side="left", padx=(0, 7))
+            chip_inner = tk.Frame(chip, bg=BG)
+            chip_inner.pack(padx=8, pady=5)
+            tk.Label(chip_inner, text=caption, font=fnt(7, mono=True),
+                     bg=BG, fg=MUTED).pack(anchor="w")
+            tk.Label(chip_inner, text=value, font=fnt(9, "bold", mono=True),
+                     bg=BG, fg=TEXT).pack(anchor="w")
+
+        self.text = tk.Label(self.right, text="", font=fnt(10), bg=BG, fg=TEXT,
                              anchor="nw", justify="left", wraplength=460)
-        self.text.pack(fill="both", expand=True, pady=(12, 14))
-        tk.Label(self.right,
-                 text=tracked(self.mission["prompt"])
-                 + "\nFLY THE PROFILE · PERFORMANCE ADDS UP TO +30",
+        self.text.pack(fill="x", pady=(0, 8))
+        tk.Label(self.right, text=tracked(self.mission["prompt"]),
                  font=fnt(8), bg=BG, fg=MUTED, anchor="w",
-                 justify="left").pack(fill="x", pady=(0, 8))
+                 justify="left").pack(fill="x", pady=(0, 2))
+        select_head = tk.Frame(self.right, bg=BG)
+        select_head.pack(fill="x", pady=(7, 5))
+        tk.Label(select_head, text="SELECT FLIGHT PLAN", font=fnt(7, "bold", mono=True),
+                 bg=BG, fg=TEXT).pack(side="left")
+        tk.Label(select_head, text="KEYS 1–3", font=fnt(7, mono=True),
+                 bg=BG, fg=MUTED).pack(side="right")
+        ranks = ("SAFE", "BOLD", "EXTREME")
         for i, option in enumerate(self.mission["options"]):
-            button = FlatButton(self.right, self.app,
-                                "{0}   {1}".format(i + 1, option["label"]),
-                                self.g(self.make_choice(i)), "outline",
-                                size=10, pady=9, padx=12)
-            button.pack(fill="x", pady=(0, 8))
-            self.buttons.append(button)
+            card = ChoiceCard(self.right, self.app, i + 1, option["label"],
+                              option["points"], ranks[option_rank(self.mission, option)],
+                              self.g(self.make_choice(i)))
+            card.pack(fill="both", expand=True, pady=(0, 7))
+            self.buttons.append(card)
 
     def make_choice(self, index):
         return lambda: self.choose(index)
@@ -750,7 +1303,7 @@ class MissionScreen(Screen):
 
     # -- briefing ------------------------------------------------------
     def type_step(self):
-        if not self.winfo_exists():
+        if not self.winfo_exists() or self.ready:
             return
         if self.typed >= len(self.briefing):
             self.finish_typing()
@@ -760,6 +1313,7 @@ class MissionScreen(Screen):
         self.app.schedule(12, self.type_step)
 
     def finish_typing(self):
+        self.typed = len(self.briefing)
         self.text.configure(text=self.briefing)
         if self.ready:
             return
@@ -768,7 +1322,7 @@ class MissionScreen(Screen):
             button.set_enabled(True)
 
     def on_digit(self, digit):
-        if self.locked:
+        if self.locked or not self.ready:
             return
         self.choose(int(digit) - 1)
 
@@ -790,6 +1344,15 @@ class MissionScreen(Screen):
         height = c.winfo_height()
         if width < 60 or height < 60:
             return
+        visuals.draw_backdrop(c, width, height, stars=20)
+        visuals.draw_orbit(c, width * 0.50, height * 0.50,
+                           width * 0.43, height * 0.27, visuals.GRID, (2, 10))
+        visuals.draw_planet(c, width * 0.84, height * 0.18,
+                            min(width, height) * 0.13, MUTED)
+        c.create_text(14, 14, anchor="nw", text="MISSION 0{0}".format(self.index + 1),
+                      fill=YELLOW, font=fnt(8, "bold", mono=True))
+        c.create_text(width - 14, 14, anchor="ne", text="{0} / 03".format(self.index + 1),
+                      fill=MUTED, font=fnt(7, mono=True))
         figure = self.mission["figure"]
         if figure == "falcon":
             self.draw_falcon(c, width, height)
@@ -797,6 +1360,9 @@ class MissionScreen(Screen):
             self.draw_starfighter(c, width, height)
         else:
             self.draw_shield(c, width, height)
+        visuals.draw_corner_marks(c, 12, 12, width - 12, height - 12, MUTED, 10)
+        c.create_text(width - 14, height - 14, anchor="se",
+                      text="NO UPLINK", fill=MUTED, font=fnt(7, mono=True))
 
     def draw_falcon(self, c, w, h):
         cx = w * 0.52
@@ -917,6 +1483,7 @@ class FlightScreen(Screen):
     """A playable flight sequence: three profiles, one physics loop."""
 
     MODES = ("LOAD SEQUENCE", "HOVERSLAM", "DEBRIS RUN")
+    SLOW_FACTOR = 0.35
 
     def __init__(self, parent, app, index, option):
         Screen.__init__(self, parent, app)
@@ -933,6 +1500,7 @@ class FlightScreen(Screen):
         self.done = False
         self.delivered = False
         self.paused = False
+        self.slowmo = False
         self.success = False
         self.bonus = 0
         self.result = None
@@ -970,13 +1538,19 @@ class FlightScreen(Screen):
         self.phase_label.pack(anchor="w", pady=(2, 0))
         right = tk.Frame(top, bg=BG)
         right.pack(side="right")
+        self.score_label = tk.Label(right, text=score_text(self.app.score),
+                                    font=fnt(8, mono=True), bg=BG, fg=MUTED)
+        self.score_label.pack(side="left", padx=(0, 14))
         self.clock_label = tk.Label(right, text="T-03.0", font=fnt(10, "bold", mono=True),
                                     bg=BG, fg=YELLOW)
         self.clock_label.pack(side="left", padx=(0, 10))
         FlatButton(right, self.app, "PAUSE", self.g(self.toggle_pause),
                    "outline", size=8, padx=10, pady=5).pack(side="left")
+        profile_text = "PROFILE · " + self.option["label"]
+        if self.app.presentation:
+            profile_text += "  ·  PRESENTATION"
         self.profile_label = tk.Label(
-            self, text="PROFILE · " + self.option["label"], font=fnt(8, mono=True),
+            self, text=profile_text, font=fnt(8, mono=True),
             bg=BG, fg=MUTED, anchor="w")
         self.profile_label.pack(fill="x", padx=26, pady=(4, 0))
         tk.Frame(self, bg=MUTED, height=1).pack(fill="x", padx=26, pady=(8, 0))
@@ -986,11 +1560,11 @@ class FlightScreen(Screen):
         bottom = tk.Frame(self, bg=BG)
         bottom.pack(fill="x", padx=26, pady=(4, 10))
         if self.mode == "load":
-            hint = "↑ / ↓  TRIM MIXTURE  ·  HOLD THE BAND  ·  P PAUSE"
+            hint = "↑ / ↓  TRIM MIXTURE  ·  HOLD THE BAND  ·  P PAUSE  ·  M SLOW-MO"
         elif self.mode == "landing":
-            hint = "SPACE / ↑  LANDING BURN  ·  ← →  RCS  ·  P PAUSE"
+            hint = "SPACE / ↑  LANDING BURN  ·  ← →  RCS  ·  P PAUSE  ·  M SLOW-MO"
         else:
-            hint = "← →  STEER  ·  AVOID THE DEBRIS  ·  P PAUSE"
+            hint = "← →  STEER  ·  AVOID THE DEBRIS  ·  P PAUSE  ·  M SLOW-MO"
         self.hint = tk.Label(bottom, text=hint, font=fnt(8, mono=True),
                              bg=BG, fg=MUTED, anchor="w")
         self.hint.pack(side="left")
@@ -1003,6 +1577,10 @@ class FlightScreen(Screen):
         if name == "pause":
             if pressed:
                 self.toggle_pause()
+            return
+        if name == "slow":
+            if pressed:
+                self.toggle_slowmo()
             return
         if name in self.keys:
             self.keys[name] = bool(pressed)
@@ -1021,6 +1599,11 @@ class FlightScreen(Screen):
         else:
             self.hide_pause()
 
+    def toggle_slowmo(self):
+        if self.phase == "ending" or self.delivered:
+            return
+        self.slowmo = not self.slowmo
+
     def show_pause(self):
         self.pause_overlay = tk.Frame(self, bg=BG)
         self.pause_overlay.place(x=0, y=0, relwidth=1, relheight=1)
@@ -1030,11 +1613,16 @@ class FlightScreen(Screen):
         card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.5)
         inner = tk.Frame(card, bg=BG)
         inner.pack(fill="both", expand=True, padx=24, pady=20)
+        tk.Label(inner, text="MISSION {0:02d} / 03  ·  LOCAL SESSION".format(
+            self.index + 1), font=fnt(8, mono=True), bg=BG, fg=MUTED).pack()
         tk.Label(inner, text=tracked("Simulation held"), font=fnt(16, "bold"),
-                 bg=BG, fg=YELLOW).pack()
+                 bg=BG, fg=YELLOW).pack(pady=(6, 0))
+        tk.Label(inner, text="CONTROLS FROZEN · TELEMETRY PAUSED",
+                 font=fnt(8, mono=True), bg=BG, fg=TEXT).pack(pady=(5, 0))
+        tk.Frame(inner, bg=MUTED, height=1).pack(fill="x", pady=(12, 0))
         tk.Label(inner, text="Flight controls are frozen. Resume when ready.",
                  font=fnt(9), bg=BG, fg=MUTED, wraplength=340,
-                 justify="center").pack(pady=(8, 14))
+                 justify="center").pack(pady=(12, 14))
         FlatButton(inner, self.app, "RESUME FLIGHT", self.g(self.toggle_pause),
                    "primary", size=10, padx=16, pady=8).pack(fill="x")
         FlatButton(inner, self.app, "RESTART FLIGHT",
@@ -1060,28 +1648,29 @@ class FlightScreen(Screen):
         dt = 0.03 if self.last_tick is None else min(0.06, max(0.001, now - self.last_tick))
         self.last_tick = now
         if not self.paused:
+            sim_dt = dt * (self.SLOW_FACTOR if self.slowmo else 1.0)
             if self.phase == "countdown":
-                self.countdown -= dt
+                self.countdown -= sim_dt
                 if self.countdown <= 0:
                     self.countdown = 0.0
                     self.phase = "flying"
             elif self.phase == "flying":
-                self.elapsed += dt
+                self.elapsed += sim_dt
                 if self.mode == "load":
-                    self.step_load(dt)
+                    self.step_load(sim_dt)
                 elif self.mode == "landing":
-                    self.step_landing(dt)
+                    self.step_landing(sim_dt)
                 else:
-                    self.step_debris(dt)
+                    self.step_debris(sim_dt)
             if self.phase == "ending":
-                self.end_delay -= dt
-                self.shake = max(0.0, self.shake - dt * 26.0)
+                self.end_delay -= sim_dt
+                self.shake = max(0.0, self.shake - sim_dt * 26.0)
                 if self.end_delay <= 0 and not self.delivered:
                     self.delivered = True
                     self.app.complete_flight(self.index, self.option, self.result)
                     return
-            self.update_particles(dt)
-            self.flash = max(0.0, self.flash - dt * 3.0)
+            self.update_particles(sim_dt)
+            self.flash = max(0.0, self.flash - sim_dt * 3.0)
         self.update_hud()
         self.draw()
         if not self.delivered:
@@ -1124,10 +1713,6 @@ class FlightScreen(Screen):
         if not success:
             self.shake = 14.0
             self.spawn_burst(0.5, 0.78, 22)
-
-    def begin_now(self):
-        self.countdown = 0.0
-        self.phase = "flying"
 
     # -- particles -----------------------------------------------------
     def spawn_burst(self, x, y, count=14):
@@ -1242,7 +1827,8 @@ class FlightScreen(Screen):
             miss = abs(self.x)
             if speed > 9.5 or miss > self.target_half + 16.0:
                 self.finish(False, 0, {"mode": "landing", "speed": speed,
-                                       "miss": miss, "fuel": self.fuel},
+                                       "miss": miss, "fuel": self.fuel,
+                                       "target_half": self.target_half},
                             "VEHICLE LOST")
             else:
                 points = 10 if miss <= self.target_half * 0.35 else (7 if miss <= self.target_half else 4)
@@ -1250,10 +1836,12 @@ class FlightScreen(Screen):
                 points += 10 if self.fuel >= 30.0 else (6 if self.fuel >= 15.0 else (3 if self.fuel > 0 else 0))
                 self.finish(True, min(30, points),
                             {"mode": "landing", "speed": speed, "miss": miss,
-                             "fuel": self.fuel}, "TOUCHDOWN")
+                             "fuel": self.fuel, "target_half": self.target_half},
+                            "TOUCHDOWN")
         elif self.run_time > 45.0:
             self.finish(False, 0, {"mode": "landing", "speed": abs(self.vy),
-                                   "miss": abs(self.x), "fuel": self.fuel},
+                                   "miss": abs(self.x), "fuel": self.fuel,
+                                   "target_half": self.target_half},
                         "VEHICLE LOST")
 
     # -- debris profile ------------------------------------------------
@@ -1348,28 +1936,75 @@ class FlightScreen(Screen):
         else:
             self.draw_debris(c, w, h)
         self.draw_particles(c, w, h)
+        scan_y = 16 + (self.elapsed * 26.0) % max(20.0, h - 32.0)
+        c.create_line(10, scan_y, w - 10, scan_y, fill=visuals.GRID)
+        visuals.draw_corner_marks(c, 12, 12, w - 12, h - 12, MUTED, 13)
+        if self.slowmo:
+            self.draw_slowmo(c, w, h)
         if self.phase == "countdown":
             number = max(1, int(math.ceil(self.countdown)))
-            c.create_rectangle(w / 2 - 64, h / 2 - 74, w / 2 + 64, h / 2 + 66,
-                               fill=BG, outline=YELLOW)
-            c.create_text(w / 2, h / 2 - 14, text=str(number),
+            cx, cy = w / 2.0, h / 2.0
+            radius = min(88.0, min(w, h) * 0.23)
+            c.create_oval(cx - radius, cy - radius, cx + radius, cy + radius,
+                          fill=BG, outline=MUTED)
+            c.create_oval(cx - radius + 8, cy - radius + 8,
+                          cx + radius - 8, cy + radius - 8,
+                          outline=YELLOW, dash=(2, 4))
+            for tick in range(12):
+                angle = math.radians(tick * 30.0)
+                inner = radius - 14
+                outer = radius - 6
+                c.create_line(cx + inner * math.cos(angle),
+                              cy + inner * math.sin(angle),
+                              cx + outer * math.cos(angle),
+                              cy + outer * math.sin(angle), fill=MUTED)
+            remaining = max(0.0, min(1.0, self.countdown / 3.0))
+            c.create_arc(cx - radius + 2, cy - radius + 2,
+                         cx + radius - 2, cy + radius - 2,
+                         start=90, extent=-359 * remaining,
+                         style="arc", outline=YELLOW, width=2)
+            c.create_text(cx, cy - 6, text=str(number),
                           fill=YELLOW, font=fnt(38, "bold", mono=True))
-            c.create_text(w / 2, h / 2 + 40, text=tracked("Flight controls"),
-                          fill=MUTED, font=fnt(8))
+            c.create_text(cx, cy + radius - 28, text=tracked("Flight controls"),
+                          fill=TEXT, font=fnt(8))
+            c.create_text(cx, cy + radius - 12, text="HOLD FOR TELEMETRY",
+                          fill=MUTED, font=fnt(7, mono=True))
         if self.phase == "ending" and self.result is not None:
             colour = YELLOW if self.success else MUTED
             c.create_rectangle(w * 0.22, h * 0.38, w * 0.78, h * 0.62,
                                fill=BG, outline=colour)
-            c.create_text(w / 2, h * 0.45, text=tracked(self.result["title"]),
+            visuals.draw_corner_marks(c, w * 0.22, h * 0.38,
+                                      w * 0.78, h * 0.62, colour, 12)
+            c.create_text(w / 2, h * 0.44, text=tracked(self.result["title"]),
                           fill=colour, font=fnt(15, "bold"))
-            c.create_text(w / 2, h * 0.53,
+            c.create_text(w / 2, h * 0.51,
                           text="PERFORMANCE +{0:02d} · DEBRIEF".format(self.bonus),
                           fill=TEXT, font=fnt(8, mono=True))
+            c.create_text(w / 2, h * 0.56, text="PRESS CONTINUE TO FILE THE FLIGHT",
+                          fill=MUTED, font=fnt(7, mono=True))
         if self.shake > 0.2:
             c.move("all", random.uniform(-self.shake, self.shake),
                    random.uniform(-self.shake, self.shake))
         if self.flash > 0:
             c.create_rectangle(2, 2, w - 2, h - 2, outline=YELLOW, width=2)
+
+    def draw_slowmo(self, c, w, h):
+        for y in range(8, int(h) - 8, 10):
+            c.create_line(0, y, w, y, fill="#0E161F")
+        c.create_rectangle(0, 0, w, 8, fill=BG, outline="")
+        c.create_rectangle(0, h - 8, w, h, fill=BG, outline="")
+        for inset, colour in ((6, "#1A242E"), (14, "#101820")):
+            c.create_rectangle(inset, inset, w - inset, h - inset,
+                               outline=colour)
+        c.create_rectangle(4, 4, w - 4, h - 4, outline=YELLOW)
+        bar_width = min(236, max(170, w * 0.32))
+        c.create_rectangle(w / 2 - bar_width / 2, 16,
+                           w / 2 + bar_width / 2, 48,
+                           fill=BG, outline=YELLOW)
+        c.create_text(w / 2, 24, text="SLOW MOTION · {0:.2f}×".format(
+            self.SLOW_FACTOR), fill=YELLOW, font=fnt(8, "bold", mono=True))
+        c.create_text(w / 2, 37, text="M TO RELEASE · TELEMETRY LIVE",
+                      fill=TEXT, font=fnt(7, mono=True))
 
     def draw_load(self, c, w, h):
         top, bottom = h * 0.18, h * 0.82
@@ -1428,8 +2063,8 @@ class FlightScreen(Screen):
             return 42.0 + (1.0 - value / max_alt) * (deck_y - 42.0)
         for tick in range(200, 801, 200):
             y = alt_y(tick)
-            c.create_line(w * 0.06, y, w * 0.94, y, fill=MUTED, dash=(2, 6))
-            c.create_text(w * 0.06, y - 6, text="{0} M".format(tick), anchor="w",
+            c.create_line(w * 0.30, y, w * 0.94, y, fill=MUTED, dash=(2, 6))
+            c.create_text(w * 0.30, y - 6, text="{0} M".format(tick), anchor="w",
                           fill=MUTED, font=fnt(7, mono=True))
         c.create_rectangle(0, h - 30, w, h, fill=BG, outline="")
         for i in range(7):
@@ -1449,15 +2084,19 @@ class FlightScreen(Screen):
         bx = max(32, min(w - 32, bx))
         by = deck_y - 16 if (self.alt <= 0 and self.success) else alt_y(self.alt)
         if not (self.phase == "ending" and not self.success):
-            c.create_line(bx, by - 16, bx, by + 8, fill=YELLOW, width=2)
-            c.create_polygon(bx - 6, by + 8, bx, by + 22, bx + 6, by + 8,
+            c.create_line(bx, by - 20, bx, by + 10, fill=YELLOW, width=2)
+            c.create_polygon(bx - 7, by + 10, bx, by + 27, bx + 7, by + 10,
                              fill="", outline=YELLOW)
-            c.create_line(bx - 7, by + 8, bx - 17, by + 18, fill=YELLOW)
-            c.create_line(bx + 7, by + 8, bx + 17, by + 18, fill=YELLOW)
+            c.create_line(bx - 8, by + 10, bx - 22, by + 22, fill=YELLOW)
+            c.create_line(bx + 8, by + 10, bx + 22, by + 22, fill=YELLOW)
         if self.burning and self.phase == "flying":
-            length = random.randint(18, 42)
-            c.create_polygon(bx - 5, by + 20, bx, by + 20 + length, bx + 5, by + 20,
-                             fill=YELLOW, outline="")
+            for offset, width in ((0, 7), (2, 4), (-2, 4)):
+                length = random.randint(22, 50) + abs(offset) * 2
+                c.create_polygon(bx - width, by + 26 + offset,
+                                 bx, by + 26 + length,
+                                 bx + width, by + 26 + offset,
+                                 fill=YELLOW if offset == 0 else TEXT,
+                                 outline="")
         c.create_line(bx, deck_y, bx, h - 12, fill=MUTED, dash=(2, 5))
         wind = self.wind_strength * math.sin(self.run_time * 0.85 + 0.5)
         for i in range(3):
@@ -1467,6 +2106,8 @@ class FlightScreen(Screen):
             c.create_line(w - 34 - length, y, w - 40 - length, y - 3, fill=MUTED)
         c.create_text(w - 14, 18, anchor="ne", text="WIND {0:+.1f}".format(wind),
                       fill=MUTED, font=fnt(8, mono=True))
+        c.create_rectangle(6, 6, 200, 74, fill=BG, outline=MUTED)
+        visuals.draw_corner_marks(c, 6, 6, 200, 74, visuals.GRID, 7)
         c.create_text(14, 18, anchor="nw", text="ALT {0:04.0f} M".format(self.alt),
                       fill=TEXT, font=fnt(10, "bold", mono=True))
         c.create_text(14, 38, anchor="nw", text="V/S {0:+05.1f} M/S".format(self.vy),
@@ -1503,6 +2144,7 @@ class FlightScreen(Screen):
                          style="arc", outline=YELLOW)
             c.create_arc(sx - 52, sy - 42, sx + 52, sy + 36, start=215, extent=110,
                          style="arc", outline=MUTED, dash=(3, 4))
+        c.create_rectangle(6, 6, 172, 34, fill=BG, outline=MUTED)
         c.create_text(14, 18, anchor="nw", text="HULL", fill=MUTED, font=fnt(8, mono=True))
         for i in range(self.max_hull):
             x = 54 + i * 15
@@ -1512,6 +2154,10 @@ class FlightScreen(Screen):
                       fill=YELLOW, font=fnt(10, "bold", mono=True))
         c.create_text(w - 14, 38, anchor="ne", text="CLOSE CALLS {0}".format(self.close_calls),
                       fill=MUTED, font=fnt(8, mono=True))
+        visuals.draw_radar(c, 52, h - 58, min(28.0, h * 0.075), YELLOW, MUTED)
+        if self.hull <= 1:
+            c.create_text(w - 14, h - 14, anchor="se", text="HULL CRITICAL",
+                          fill=YELLOW, font=fnt(8, "bold", mono=True))
 
 
 class OutcomeScreen(Screen):
@@ -1529,7 +2175,10 @@ class OutcomeScreen(Screen):
         inner.pack(fill="both", expand=True, padx=26, pady=22)
         head = tk.Frame(inner, bg=BG)
         head.pack(fill="x")
-        tk.Label(head, text="MISSION {0:02d} · DEBRIEF".format(index + 1),
+        head_text = ("PRESENTATION · MISSION {0:02d}".format(index + 1)
+                     if app.presentation else
+                     "MISSION {0:02d} · DEBRIEF".format(index + 1))
+        tk.Label(head, text=head_text,
                  font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w").pack(side="left")
         tk.Label(head, text="EXECUTION " + ("SUCCESS" if record["success"] else "FAILED"),
                  font=fnt(8, "bold", mono=True), bg=BG,
@@ -1556,22 +2205,41 @@ class OutcomeScreen(Screen):
         tk.Label(pin_head, text="+{0:02d} PERFORMANCE".format(record["bonus"]),
                  font=fnt(8, mono=True), bg=BG, fg=YELLOW,
                  anchor="e").pack(side="right")
-        self.stats = tk.Label(pin, text=self.stats_text(record["stats"], record["success"]),
+        stats = record["stats"]
+        metrics = dataviz.telemetry_metrics(stats, record["success"])
+        self.chart = None
+        if metrics:
+            self.chart = MetricChart(pin, metrics, height=min(96, 30 * len(metrics) + 2))
+            self.chart.pack(fill="x", pady=(8, 2))
+            note = "TELEMETRY CAPTURED LOCALLY · NOT UPLOADED"
+            if any(metric.target is not None for metric in metrics):
+                note += " · YELLOW TICK = TARGET"
+        else:
+            note = self.stats_text(stats, record["success"])
+        self.stats = tk.Label(pin, text=note,
                               font=fnt(8, mono=True), bg=BG, fg=MUTED,
                               anchor="w", justify="left", wraplength=600)
-        self.stats.pack(fill="x", pady=(6, 0))
+        self.stats.pack(fill="x", pady=(2, 0))
         bottom = tk.Frame(inner, bg=BG)
         bottom.pack(fill="x", pady=(16, 0))
-        left = tk.Frame(bottom, bg=BG)
-        left.pack(side="left")
-        tk.Label(left, text="DECISION {0:+d} · FLIGHT {1:+d}".format(
-            record["option_points"], record["bonus"]), font=fnt(8, mono=True),
-            bg=BG, fg=MUTED, anchor="w").pack(anchor="w")
-        tk.Label(left, text="{0:+d} PTS".format(record["points"]),
-                 font=fnt(20, "bold", mono=True), bg=BG,
-                 fg=YELLOW if record["points"] > 0 else MUTED).pack(anchor="w")
-        FlatButton(bottom, app, "CONTINUE", self.g(app.advance), "primary",
-                   size=10, padx=18, pady=8).pack(side="right")
+        ledger = tk.Frame(bottom, bg=BG)
+        ledger.pack(side="left", fill="x", expand=True)
+        for caption, value in (("DECISION", "{0:+d}".format(record["option_points"])),
+                               ("FLIGHT", "{0:+d}".format(record["bonus"])),
+                               ("TOTAL", "{0:+d}".format(record["points"]))):
+            cell = tk.Frame(ledger, bg=BG, highlightthickness=1,
+                            highlightbackground=MUTED)
+            cell.pack(side="left", fill="x", expand=True, padx=(0, 7))
+            cell_inner = tk.Frame(cell, bg=BG)
+            cell_inner.pack(fill="x", padx=9, pady=6)
+            tk.Label(cell_inner, text=caption, font=fnt(7, mono=True),
+                     bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+            tk.Label(cell_inner, text=value, font=fnt(14, "bold", mono=True),
+                     bg=BG, fg=YELLOW if record["points"] > 0 else MUTED,
+                     anchor="w").pack(fill="x")
+        FlatButton(bottom, app, "BACK TO TITLE" if app.presentation else "CONTINUE",
+                   self.g(app.advance), "primary",
+                   size=10, padx=18, pady=8).pack(side="right", padx=(10, 0))
 
         def wrap(event):
             width = max(260, event.width - 56)
@@ -1602,86 +2270,167 @@ class FinalScreen(Screen):
 
         holder = tk.Frame(self, bg=BG)
         holder.pack(fill="both", expand=True)
-        self.card = tk.Frame(holder, bg=BG)
-        self.card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.76)
+        self.card = tk.Frame(holder, bg=BG, highlightthickness=1,
+                             highlightbackground=MUTED)
+        self.card.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.90)
 
-        tk.Label(self.card, text=tracked("Flight log · Rebel Aerospace Academy"),
-                 font=fnt(8), bg=BG, fg=MUTED).pack()
-        tk.Label(self.card, text=tracked("Mission complete"), font=fnt(21, "bold"),
-                 bg=BG, fg=YELLOW).pack(pady=(6, 2))
-        tk.Label(self.card, text="CALLSIGN · " + app.callsign,
-                 font=fnt(9, mono=True), bg=BG, fg=MUTED).pack()
+        inner = tk.Frame(self.card, bg=BG)
+        inner.pack(fill="both", expand=True, padx=22, pady=16)
+        inner.columnconfigure(0, weight=5, minsize=250)
+        inner.columnconfigure(1, weight=7, minsize=320)
+        inner.rowconfigure(0, weight=1)
+
+        left = tk.Frame(inner, bg=BG)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
+        right = tk.Frame(inner, bg=BG)
+        right.grid(row=0, column=1, sticky="nsew")
+
+        tk.Label(left, text=tracked("Flight log · Rebel Aerospace"),
+                 font=fnt(7), bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+        self.headline_font = tkfont.Font(family=SANS, size=17, weight="bold")
+        self.headline = tk.Label(left, text=tracked("Mission complete"),
+                                 font=self.headline_font, bg=BG, fg=YELLOW,
+                                 anchor="w")
+        self.headline.pack(fill="x", pady=(5, 2))
+        tk.Label(left, text="CALLSIGN · " + app.callsign,
+                 font=fnt(9, mono=True), bg=BG, fg=TEXT, anchor="w").pack(fill="x")
+
+        self.badge = tk.Canvas(left, bg=BG, height=176, bd=0,
+                               highlightthickness=0, takefocus=0)
+        self.badge.pack(fill="x", pady=(8, 0))
+        self.badge.bind("<Configure>", self.g(self.draw_badge))
+
         if app.last_run_improved:
             record_text = "NEW PERSONAL BEST · SAVED LOCALLY"
         else:
             record_text = "PERSONAL BEST · {0:03d}".format(app.pilot.best_score)
-        tk.Label(self.card, text=record_text, font=fnt(8, mono=True), bg=BG,
-                 fg=YELLOW if app.last_run_improved else MUTED).pack(pady=(4, 0))
+        tk.Label(left, text=record_text, font=fnt(8, mono=True), bg=BG,
+                 fg=YELLOW if app.last_run_improved else MUTED,
+                 anchor="w").pack(fill="x", pady=(2, 0))
 
-        tk.Label(self.card, text=tracked("Total score"), font=fnt(8),
-                 bg=BG, fg=MUTED).pack(pady=(12, 0))
-        score_row = tk.Frame(self.card, bg=BG)
-        score_row.pack()
-        tk.Label(score_row, text=str(app.score), font=fnt(28, "bold", mono=True),
-                 bg=BG, fg=YELLOW).pack(side="left")
+        score_row = tk.Frame(left, bg=BG)
+        score_row.pack(fill="x", pady=(10, 0))
+        tk.Label(score_row, text=str(app.score), font=fnt(30, "bold", mono=True),
+                 bg=BG, fg=YELLOW, anchor="w").pack(side="left")
         tk.Label(score_row, text="/ " + str(MAX_SCORE), font=fnt(10, mono=True),
-                 bg=BG, fg=MUTED).pack(side="left", padx=(8, 0), pady=(10, 0))
-        tk.Label(self.card, text=tracked("Rank · " + rank_for(app.score)),
-                 font=fnt(11, "bold"), bg=BG, fg=TEXT).pack(pady=(4, 10))
+                 bg=BG, fg=MUTED, anchor="w").pack(side="left", padx=(8, 0),
+                                                    pady=(12, 0))
+        tk.Label(left, text=tracked("Rank · " + rank_for(app.score)),
+                 font=fnt(11, "bold"), bg=BG, fg=TEXT, anchor="w").pack(fill="x",
+                                                                        pady=(2, 8))
 
-        log = tk.Frame(self.card, bg=BG)
+        meta = tk.Frame(left, bg=BG)
+        meta.pack(fill="x")
+        for caption, value in (("FLIGHTS", "{0:02d}".format(app.pilot.flights)),
+                               ("BEST", "{0:03d}".format(app.pilot.best_score))):
+            cell = tk.Frame(meta, bg=BG, highlightthickness=1,
+                            highlightbackground=MUTED)
+            cell.pack(side="left", fill="x", expand=True, padx=(0, 7))
+            cell_inner = tk.Frame(cell, bg=BG)
+            cell_inner.pack(fill="x", padx=8, pady=5)
+            tk.Label(cell_inner, text=caption, font=fnt(7, mono=True),
+                     bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+            tk.Label(cell_inner, text=value, font=fnt(11, "bold", mono=True),
+                     bg=BG, fg=TEXT, anchor="w").pack(fill="x")
+
+        tk.Label(right, text="FLIGHT LOG // SCORE LEDGER", font=fnt(8, mono=True),
+                 bg=BG, fg=MUTED, anchor="w").pack(fill="x")
+        tk.Label(right, text="MISSION SCORE · MAX 130 EACH",
+                 font=fnt(8, "bold"), bg=BG, fg=TEXT, anchor="w").pack(fill="x",
+                                                                       pady=(4, 7))
+        log_head = tk.Frame(right, bg=BG)
+        log_head.pack(fill="x")
+        tk.Label(log_head, text="MISSION", font=fnt(7, mono=True), bg=BG,
+                 fg=MUTED, anchor="w").pack(side="left")
+        tk.Label(log_head, text="VERDICT", font=fnt(7, mono=True), bg=BG,
+                 fg=MUTED, anchor="w").pack(side="left", padx=(12, 0))
+        tk.Label(log_head, text="PTS", font=fnt(7, mono=True), bg=BG,
+                 fg=MUTED, anchor="e").pack(side="right")
+        tk.Frame(right, bg=MUTED, height=1).pack(fill="x", pady=(4, 4))
+
+        log = tk.Frame(right, bg=BG)
         log.pack(fill="x")
         for i, mission in enumerate(MISSIONS):
             result = app.results[i] if i < len(app.results) else None
+            row = tk.Frame(log, bg=BG)
+            row.pack(fill="x", pady=1)
+            tag = "M{0:02d}  {1}".format(i + 1, mission["tag"][:20])
+            tk.Label(row, text=tag, font=fnt(8, mono=True), bg=BG,
+                     fg=TEXT, anchor="w").pack(side="left")
             if result is None:
-                line = "M{0:02d}  {1:<18}  {2:>4}  SKIPPED".format(
-                    i + 1, mission["tag"][:18], "0")
-                colour = MUTED
+                verdict, points, colour = "SKIPPED", "0", MUTED
             else:
-                line = "M{0:02d}  {1:<18}  {2:>4}  {3}".format(
-                    i + 1, mission["tag"][:18],
-                    "{0:+d}".format(result["points"]), result["verdict"])
-                colour = verdict_colour(result["verdict"])
-            tk.Label(log, text=line, font=fnt(9, mono=True), bg=BG, fg=colour,
-                     anchor="w").pack(fill="x")
+                verdict = result["verdict"]
+                points = "{0:+d}".format(result["points"])
+                colour = verdict_colour(verdict)
+            tk.Label(row, text=verdict, font=fnt(8, "bold", mono=True), bg=BG,
+                     fg=colour, anchor="w").pack(side="left", padx=(12, 0))
+            tk.Label(row, text=points, font=fnt(9, "bold", mono=True), bg=BG,
+                     fg=colour, anchor="e").pack(side="right")
 
-        self.panel = tk.Frame(self.card, bg=BG, bd=0, highlightthickness=1,
+        chart_metrics = dataviz.score_metrics(app.results)
+        if chart_metrics:
+            self.chart = MetricChart(right, chart_metrics, height=70)
+            self.chart.pack(fill="x", pady=(9, 0))
+
+        self.panel = tk.Frame(right, bg=BG, bd=0, highlightthickness=1,
                               highlightbackground=MUTED)
-        self.panel.pack(fill="x", pady=(14, 0))
-        inner = tk.Frame(self.panel, bg=BG)
-        inner.pack(fill="both", expand=True, padx=18, pady=12)
-        head = tk.Frame(inner, bg=BG)
+        self.panel.pack(fill="x", pady=(12, 0))
+        panel_inner = tk.Frame(self.panel, bg=BG)
+        panel_inner.pack(fill="both", expand=True, padx=12, pady=9)
+        head = tk.Frame(panel_inner, bg=BG)
         head.pack(fill="x")
-        tk.Label(head, text=tracked("Tiger Data Hypertable Cloud"), font=fnt(8),
+        tk.Label(head, text=tracked("Tiger Data Hypertable"), font=fnt(7),
                  bg=BG, fg=TEXT, anchor="w").pack(side="left")
-        tk.Label(head, text="SIMULATION", font=fnt(8, mono=True), bg=BG, fg=YELLOW,
-                 anchor="e").pack(side="right")
+        tk.Label(head, text="SIMULATION", font=fnt(8, mono=True), bg=BG,
+                 fg=YELLOW, anchor="e").pack(side="right")
         self.note = tk.Label(
-            inner,
+            panel_inner,
             text=("Telemetry is written to a simulated hypertable on this machine. "
                   "No network request is made and no data is uploaded."),
-            font=fnt(9), bg=BG, fg=MUTED, anchor="w", justify="left",
-            wraplength=600)
-        self.note.pack(fill="x", pady=(6, 10))
-        self.bar = ProgressBar(inner, app, 8)
+            font=fnt(8), bg=BG, fg=MUTED, anchor="w", justify="left",
+            wraplength=390)
+        self.note.pack(fill="x", pady=(5, 7))
+        self.bar = ProgressBar(panel_inner, app, 8)
         self.bar.pack(fill="x")
-        self.counter = tk.Label(inner, text="0 COORDINATE ROWS WRITTEN",
-                                font=fnt(10, mono=True), bg=BG, fg=YELLOW,
+        self.counter = tk.Label(panel_inner, text="0 COORDINATE ROWS WRITTEN",
+                                font=fnt(9, mono=True), bg=BG, fg=YELLOW,
                                 anchor="w")
-        self.counter.pack(fill="x", pady=(8, 2))
-        self.status = tk.Label(inner, text="OPENING LOCAL WRITER",
-                               font=fnt(8, mono=True), bg=BG, fg=MUTED, anchor="w")
+        self.counter.pack(fill="x", pady=(6, 1))
+        self.status = tk.Label(panel_inner, text="OPENING LOCAL WRITER",
+                               font=fnt(7, mono=True), bg=BG, fg=MUTED,
+                               anchor="w")
         self.status.pack(fill="x")
 
-        actions = tk.Frame(self.card, bg=BG)
-        actions.pack(pady=(16, 0))
+        actions = tk.Frame(right, bg=BG)
+        actions.pack(fill="x", pady=(12, 0))
         FlatButton(actions, app, "PLAY AGAIN", self.g(app.start_over), "primary",
-                   size=10, padx=22, pady=9).pack(side="left", padx=(0, 10))
+                   size=10, padx=18, pady=8).pack(side="left", padx=(0, 8))
         FlatButton(actions, app, "QUIT", self.g(app.close), "outline",
-                   size=10, padx=22, pady=9).pack(side="left")
+                   size=10, padx=18, pady=8).pack(side="left")
 
         self.panel.bind("<Configure>", self.g(self.on_panel_resize))
+        self.card.bind("<Configure>", self.g(self.on_card_resize))
         self.app.schedule(320, self.save_step)
+
+    def draw_badge(self, _event=None):
+        w = self.badge.winfo_width()
+        h = self.badge.winfo_height()
+        if w < 20 or h < 20:
+            return
+        self.badge.delete("all")
+        visuals.draw_rank_badge(self.badge, w / 2.0, h / 2.0 - 4,
+                               min(w, h) * 0.37, rank_for(self.app.score),
+                               fnt(8, "bold", mono=True))
+        self.badge.create_text(w / 2.0, h - 12, text="RAA // RANK CERTIFICATE",
+                               fill=MUTED, font=fnt(7, mono=True))
+
+    def on_card_resize(self, event):
+        size = max(12, min(18, int(event.width / 58)))
+        try:
+            self.headline_font.configure(size=size)
+        except Exception:
+            pass
 
     def on_panel_resize(self, event):
         self.note.configure(wraplength=max(220, event.width - 40))
@@ -1712,15 +2461,576 @@ class FinalScreen(Screen):
             self.counter.configure(
                 text="{0:,} COORDINATE ROWS WRITTEN".format(self.total_rows))
             self.status.configure(
-                text="WRITE COMPLETE · SAVED LOCALLY · NOTHING UPLOADED", fg=YELLOW)
+                text="WRITE COMPLETE · SAVED LOCALLY · NOTHING UPLOADED",
+                fg=YELLOW)
             return
         self.app.schedule(85, self.save_step)
+
+
+class ChipButton(tk.Frame):
+    """Square selector tab used by the hangar."""
+
+    def __init__(self, parent, text, command, selected=False):
+        tk.Frame.__init__(self, parent, bg=BG, highlightthickness=1,
+                          highlightbackground=MUTED)
+        self.command = command
+        self.selected = selected
+        self.hover = False
+        self.label = tk.Label(self, text=text, font=fnt(8, "bold", mono=True),
+                              bg=BG, fg=TEXT, padx=8, pady=6)
+        self.label.pack(fill="both", expand=True)
+        for widget in (self, self.label):
+            widget.bind("<Button-1>", self.on_click)
+            widget.bind("<Enter>", self.on_enter)
+            widget.bind("<Leave>", self.on_leave)
+            try:
+                widget.configure(cursor="hand2")
+            except tk.TclError:
+                pass
+        self.apply()
+
+    def apply(self):
+        if self.selected:
+            background, foreground, border = YELLOW, BG, YELLOW
+        elif self.hover:
+            background, foreground, border = BG, YELLOW, YELLOW
+        else:
+            background, foreground, border = BG, TEXT, MUTED
+        self.configure(bg=background, highlightbackground=border,
+                       highlightcolor=border)
+        self.label.configure(bg=background, fg=foreground)
+
+    def set_selected(self, selected):
+        self.selected = bool(selected)
+        self.hover = False
+        self.apply()
+
+    def on_click(self, _event=None):
+        self.command()
+
+    def on_enter(self, _event=None):
+        if not self.hover:
+            self.hover = True
+            self.apply()
+
+    def on_leave(self, _event=None):
+        if self.hover:
+            self.hover = False
+            self.apply()
+
+
+class QuizOption(tk.Frame):
+    """One answer row in the hangar exam."""
+
+    def __init__(self, parent, number, command):
+        tk.Frame.__init__(self, parent, bg=BG, highlightthickness=1,
+                          highlightbackground=MUTED)
+        self.command = command
+        self.state = "idle"
+        self.hover = False
+        self.inner = tk.Frame(self, bg=BG)
+        self.inner.pack(fill="both", expand=True, padx=8, pady=6)
+        self.number_box = tk.Frame(self.inner, bg=BG, width=24, height=24,
+                                   highlightthickness=1,
+                                   highlightbackground=MUTED)
+        self.number_box.pack(side="left")
+        self.number_box.pack_propagate(False)
+        self.number = tk.Label(self.number_box, text=str(number),
+                               font=fnt(9, "bold", mono=True), bg=BG,
+                               fg=YELLOW)
+        self.number.place(relx=0.5, rely=0.5, anchor="center")
+        self.label = tk.Label(self.inner, text="", font=fnt(8), bg=BG,
+                              fg=TEXT, anchor="w", justify="left",
+                              wraplength=280)
+        self.label.pack(side="left", fill="x", expand=True, padx=(9, 0))
+        self.widgets = (self, self.inner, self.number_box, self.number,
+                        self.label)
+        for widget in self.widgets:
+            widget.bind("<Button-1>", self.on_click)
+            widget.bind("<Enter>", self.on_enter)
+            widget.bind("<Leave>", self.on_leave)
+        self.apply()
+
+    def set_text(self, text):
+        self.label.configure(text=text)
+
+    def set_wraplength(self, width):
+        self.label.configure(wraplength=max(120, int(width)))
+
+    def set_state(self, state):
+        self.state = state
+        self.hover = False
+        self.apply()
+
+    def apply(self):
+        if self.state == "correct":
+            background, foreground, border = YELLOW, BG, YELLOW
+        elif self.state == "wrong":
+            background, foreground, border = BG, MUTED, MUTED
+        elif self.state == "dim":
+            background, foreground, border = BG, MUTED, visuals.GRID
+        elif self.hover:
+            background, foreground, border = BG, YELLOW, YELLOW
+        else:
+            background, foreground, border = BG, TEXT, MUTED
+        self.configure(bg=background, highlightbackground=border,
+                       highlightcolor=border)
+        self.inner.configure(bg=background)
+        self.number_box.configure(bg=background, highlightbackground=border,
+                                  highlightcolor=border)
+        self.number.configure(bg=background, fg=foreground)
+        self.label.configure(bg=background, fg=foreground)
+        try:
+            cursor = "hand2" if self.state == "idle" else "arrow"
+            for widget in self.widgets:
+                widget.configure(cursor=cursor)
+        except tk.TclError:
+            pass
+
+    def _contains(self, widget):
+        while widget is not None:
+            if widget is self:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
+
+    def on_enter(self, _event=None):
+        if self.state == "idle" and not self.hover:
+            self.hover = True
+            self.apply()
+
+    def on_leave(self, event=None):
+        inside = False
+        if event is not None:
+            try:
+                inside = self._contains(self.winfo_containing(event.x_root,
+                                                               event.y_root))
+            except Exception:
+                inside = False
+        if not inside and self.hover:
+            self.hover = False
+            self.apply()
+
+    def on_click(self, _event=None):
+        if self.state == "idle":
+            self.command()
+
+
+class HangarScreen(Screen):
+    """Local 3D ship viewer plus a short interactive ship exam."""
+
+    def __init__(self, parent, app):
+        Screen.__init__(self, parent, app)
+        self.ship_index = 0
+        self.yaw = 0.6
+        self.pitch = 0.16
+        self.zoom = shipyard.SHIPS[0]["zoom"]
+        self.last_polygons = 0
+        self.dragging = False
+        self.last_pointer = (0, 0)
+        self.resume_at = 0.0
+        self.quiz_index = 0
+        self.quiz_score = 0
+        self.answered = None
+        self.finished = False
+
+        bar = tk.Frame(self, bg=BG)
+        bar.pack(fill="x", padx=28, pady=(14, 0))
+        tk.Label(bar, text="HANGAR / SHIPYARD", font=fnt(9, "bold", mono=True),
+                 bg=BG, fg=YELLOW).pack(side="left")
+        tk.Label(bar, text="LOCAL 3D RENDER · NO ASSETS",
+                 font=fnt(8, mono=True), bg=BG, fg=MUTED).pack(side="left",
+                                                              padx=(14, 0))
+        FlatButton(bar, app, "BACK TO TITLE", self.g(app.back_to_title),
+                   "outline", size=8, padx=12, pady=6).pack(side="right")
+        tk.Frame(self, bg=MUTED, height=1).pack(fill="x", padx=28,
+                                                pady=(10, 0))
+
+        body = tk.Frame(self, bg=BG)
+        body.pack(fill="both", expand=True, padx=28, pady=12)
+        body.columnconfigure(0, weight=6, minsize=390)
+        body.columnconfigure(1, weight=5, minsize=330)
+        body.rowconfigure(0, weight=1)
+
+        left = tk.Frame(body, bg=BG)
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 22))
+        self.viewer = tk.Canvas(left, bg=BG, bd=0, highlightthickness=1,
+                                highlightbackground=MUTED, takefocus=0)
+        self.viewer.pack(fill="both", expand=True)
+        self.viewer.bind("<Configure>", self.g(self.paint_viewer))
+        self.viewer.bind("<ButtonPress-1>", self.g(self.on_drag_start))
+        self.viewer.bind("<B1-Motion>", self.g(self.on_drag))
+        self.viewer.bind("<ButtonRelease-1>", self.g(self.on_drag_end))
+        self.ref_model = None
+        self.ref_name = ""
+        self.ref_yaw = 0.55
+        self.ref_zoom = None
+        self.ref_canvas = tk.Canvas(self.viewer, bg=BG, bd=0,
+                                    highlightthickness=1,
+                                    highlightbackground=MUTED, takefocus=0,
+                                    width=150, height=108)
+        self.ref_canvas.place(x=20, y=20, width=150, height=108)
+
+        tabs = tk.Frame(left, bg=BG)
+        tabs.pack(fill="x", pady=(8, 0))
+        self.tabs = []
+        for index, ship in enumerate(shipyard.SHIPS):
+            tab = ChipButton(tabs, ship["name"], self.g(self.pick_ship(index)))
+            tab.pack(side="left", padx=(0, 6))
+            self.tabs.append(tab)
+        self.tabs[0].set_selected(True)
+        tk.Label(left, text="DRAG TO ORBIT · AUTO ROTATE · LOCAL GEOMETRY",
+                 font=fnt(7, mono=True), bg=BG, fg=MUTED,
+                 anchor="w").pack(fill="x", pady=(7, 0))
+
+        right = tk.Frame(body, bg=BG)
+        right.grid(row=0, column=1, sticky="nsew")
+
+        dossier = tk.Frame(right, bg=BG, highlightthickness=1,
+                           highlightbackground=MUTED)
+        dossier.pack(fill="x")
+        inner = tk.Frame(dossier, bg=BG)
+        inner.pack(fill="x", padx=14, pady=11)
+        self.ship_title = tk.Label(inner, text="", font=fnt(14, "bold"),
+                                   bg=BG, fg=YELLOW, anchor="w")
+        self.ship_title.pack(fill="x")
+        self.ship_class = tk.Label(inner, text="", font=fnt(7, mono=True),
+                                   bg=BG, fg=MUTED, anchor="w")
+        self.ship_class.pack(fill="x", pady=(2, 6))
+        self.ship_values = {}
+        for caption, key in (("ROLE", "role"), ("CREW", "crew"),
+                             ("LENGTH", "length"), ("ARMAMENT", "arms")):
+            row = tk.Frame(inner, bg=BG)
+            row.pack(fill="x", pady=1)
+            tk.Label(row, text=caption, font=fnt(7, mono=True), bg=BG,
+                     fg=MUTED, width=9, anchor="w").pack(side="left")
+            value = tk.Label(row, text="", font=fnt(8, mono=True), bg=BG,
+                             fg=TEXT, anchor="w", justify="left",
+                             wraplength=220)
+            value.pack(side="left", fill="x", expand=True)
+            self.ship_values[key] = value
+        self.ship_note = tk.Label(inner, text="", font=fnt(8), bg=BG,
+                                  fg=MUTED, anchor="w", justify="left",
+                                  wraplength=290)
+        self.ship_note.pack(fill="x", pady=(7, 0))
+
+        quiz = tk.Frame(right, bg=BG, highlightthickness=1,
+                        highlightbackground=MUTED)
+        quiz.pack(fill="both", expand=True, pady=(10, 0))
+        self.quiz_panel = quiz
+        room = tk.Frame(quiz, bg=BG)
+        room.pack(fill="both", expand=True, padx=14, pady=11)
+
+        head = tk.Frame(room, bg=BG)
+        head.pack(fill="x")
+        tk.Label(head, text="CADET EXAM", font=fnt(8, "bold", mono=True),
+                 bg=BG, fg=TEXT).pack(side="left")
+        self.quiz_progress = tk.Label(head, text="", font=fnt(7, mono=True),
+                                      bg=BG, fg=MUTED, anchor="e")
+        self.quiz_progress.pack(side="right")
+        self.question = tk.Label(room, text="", font=fnt(9), bg=BG, fg=TEXT,
+                                 anchor="w", justify="left", wraplength=300)
+        self.question.pack(fill="x", pady=(8, 7))
+        self.options = []
+        for number in range(3):
+            option = QuizOption(
+                room, number + 1,
+                self.g(lambda index=number: self.answer(index)))
+            option.pack(fill="x", pady=(0, 5))
+            self.options.append(option)
+        self.feedback = tk.Label(room, text="", font=fnt(8), bg=BG, fg=MUTED,
+                                 anchor="w", justify="left", wraplength=300)
+        self.feedback.pack(fill="x", pady=(3, 6))
+        self.next_button = FlatButton(room, app, "NEXT QUESTION",
+                                      self.g(self.next_question), "primary",
+                                      size=9, padx=12, pady=7)
+        self.next_button.pack(anchor="e")
+        self.next_button.set_enabled(False)
+        quiz.bind("<Configure>", self.g(self.on_quiz_resize))
+
+        self.set_ship(0, redraw=False)
+        self.load_question()
+        self.app.schedule(60, self.tick)
+
+    # -- 3D viewer ------------------------------------------------------
+    def pick_ship(self, index):
+        return lambda: self.set_ship(index)
+
+    def set_ship(self, index, redraw=True):
+        self.ship_index = index
+        ship = shipyard.SHIPS[index]
+        self.zoom = ship["zoom"]
+        self.yaw = ship["yaw"]
+        self.pitch = ship["pitch"]
+        for position, tab in enumerate(self.tabs):
+            tab.set_selected(position == index)
+        self.ship_title.configure(text=ship["name"])
+        self.ship_class.configure(text=ship["class"].upper() + " // REFERENCE")
+        for key, label in self.ship_values.items():
+            label.configure(text=str(ship[key]).upper())
+        self.ship_note.configure(text=ship["note"])
+        if redraw:
+            self.draw_ship()
+            self.draw_hud()
+
+    def paint_viewer(self, _event=None):
+        canvas = self.viewer
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 40 or height < 40:
+            return
+        canvas.delete("all")
+        visuals.draw_backdrop(canvas, width, height, stars=26)
+        visuals.draw_orbit(canvas, width / 2.0, height / 2.0,
+                           min(width, height) * 0.44,
+                           min(width, height) * 0.17, visuals.GRID, (2, 12))
+        visuals.draw_corner_marks(canvas, 10, 10, width - 10, height - 10,
+                                  MUTED, 11)
+        self.draw_ship()
+        self.draw_hud()
+        size = int(max(120, min(210, width * 0.36)))
+        ref_height = int(size * 0.72)
+        self.ref_canvas.place_configure(
+            x=max(8, width - size - 14),
+            y=max(8, height - ref_height - 14),
+            width=size, height=ref_height)
+        self.ref_zoom = None
+        self.draw_reference()
+
+    def draw_ship(self):
+        canvas = self.viewer
+        canvas.delete("ship")
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 40 or height < 40:
+            return
+        ship = shipyard.SHIPS[self.ship_index]
+        inner_width = max(40, width - 54)
+        inner_height = max(40, height - 54)
+        frame = shipyard.build_frame(shipyard.MODELS[ship["id"]],
+                                     inner_width, inner_height,
+                                     self.yaw, self.pitch, self.zoom)
+        self.last_polygons = len(frame)
+        offset_x = (width - inner_width) / 2.0
+        offset_y = (height - inner_height) / 2.0
+        for polygon in frame:
+            points = []
+            for x, y in polygon["points"]:
+                points.extend((x + offset_x, y + offset_y))
+            canvas.create_polygon(points, fill=polygon["fill"],
+                                  outline=polygon["outline"], width=1,
+                                  tags="ship")
+
+    def fit_reference(self):
+        canvas = self.ref_canvas
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 40 or height < 40 or self.ref_model is None:
+            self.ref_zoom = None
+            return
+        widest, tallest = 1.0, 1.0
+        for yaw in (0.0, 0.5, 1.0, 1.5, 2.0, 2.5):
+            frame = shipyard.build_frame(self.ref_model, width, height - 24,
+                                         yaw, 0.2, 1.0)
+            xs = [x for polygon in frame for x, _ in polygon["points"]]
+            ys = [y for polygon in frame for _, y in polygon["points"]]
+            if not xs or not ys:
+                continue
+            widest = max(widest, max(xs) - min(xs))
+            tallest = max(tallest, max(ys) - min(ys))
+        self.ref_zoom = min(3.0, 0.9 * min((width - 18) / widest,
+                                          (height - 36) / tallest))
+
+    def draw_reference(self):
+        canvas = self.ref_canvas
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        canvas.delete("all")
+        if width < 30 or height < 30 or self.ref_model is None:
+            return
+        if self.ref_zoom is None:
+            self.fit_reference()
+        zoom = self.ref_zoom or 1.0
+        canvas.create_line(width / 2.0, 6, width / 2.0, height - 20,
+                           fill=visuals.GRID)
+        canvas.create_line(6, (height - 20) / 2.0, width - 6,
+                           (height - 20) / 2.0, fill=visuals.GRID)
+        frame = shipyard.build_frame(self.ref_model, width, height - 22,
+                                     self.ref_yaw, 0.2, zoom)
+        for polygon in frame:
+            points = []
+            for x, y in polygon["points"]:
+                points.extend((x, y))
+            canvas.create_polygon(points, fill=polygon["fill"],
+                                  outline=polygon["outline"], tags="ref")
+        canvas.create_text(6, 4, anchor="nw", fill=MUTED,
+                           text="EXAM REF · {0:02d}".format(
+                               self.quiz_index + 1),
+                           font=fnt(6, mono=True))
+        canvas.create_text(width - 6, height - 4, anchor="se", fill=YELLOW,
+                           text=self.ref_name,
+                           font=fnt(7, "bold", mono=True))
+
+    def draw_hud(self):
+        canvas = self.viewer
+        canvas.delete("hud")
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 40 or height < 40:
+            return
+        ship = shipyard.SHIPS[self.ship_index]
+        canvas.create_text(14, 14, anchor="nw", tags="hud",
+                           text="MODEL 0{0} · {1}".format(self.ship_index + 1,
+                                                          ship["name"]),
+                           fill=YELLOW, font=fnt(8, "bold", mono=True))
+        canvas.create_text(width - 14, 14, anchor="ne", tags="hud",
+                           text="YAW {0:03.0f}° · PITCH {1:+03.0f}°".format(
+                               math.degrees(self.yaw) % 360,
+                               math.degrees(self.pitch)),
+                           fill=MUTED, font=fnt(7, mono=True))
+        canvas.create_text(14, height - 14, anchor="sw", tags="hud",
+                           text="POLYGONS {0}".format(self.last_polygons),
+                           fill=MUTED, font=fnt(7, mono=True))
+
+    def tick(self):
+        if not self.winfo_exists():
+            return
+        if not self.dragging and time.monotonic() >= self.resume_at:
+            self.yaw += 0.012
+        self.ref_yaw += 0.02
+        self.draw_ship()
+        self.draw_hud()
+        self.draw_reference()
+        self.app.schedule(60, self.tick)
+
+    def on_drag_start(self, event):
+        self.dragging = True
+        self.last_pointer = (event.x, event.y)
+
+    def on_drag(self, event):
+        if not self.dragging:
+            return
+        dx = event.x - self.last_pointer[0]
+        dy = event.y - self.last_pointer[1]
+        self.last_pointer = (event.x, event.y)
+        self.yaw += dx * 0.012
+        self.pitch = max(-1.05, min(1.05, self.pitch + dy * 0.008))
+        self.draw_ship()
+        self.draw_hud()
+
+    def on_drag_end(self, _event=None):
+        self.dragging = False
+        self.resume_at = time.monotonic() + 1.8
+
+    # -- exam -----------------------------------------------------------
+    def on_quiz_resize(self, event):
+        width = max(180, event.width - 40)
+        self.question.configure(wraplength=width)
+        self.feedback.configure(wraplength=width)
+        for option in self.options:
+            option.set_wraplength(width - 64)
+
+    def load_question(self):
+        self.answered = None
+        question = shipyard.QUESTIONS[self.quiz_index]
+        reference = shipyard.EXAM_MODELS[
+            shipyard.QUESTION_MODEL_IDS[self.quiz_index]]
+        self.ref_model = reference["mesh"]
+        self.ref_name = reference["name"]
+        self.ref_yaw = 0.55
+        self.ref_zoom = None
+        self.quiz_progress.configure(
+            text="QUESTION {0} / {1} · {2} CORRECT".format(
+                self.quiz_index + 1, len(shipyard.QUESTIONS), self.quiz_score))
+        self.question.configure(text=question["question"], fg=TEXT)
+        for option, text in zip(self.options, question["answers"]):
+            option.set_state("idle")
+            option.set_text(text)
+        self.feedback.configure(text="", fg=MUTED)
+        self.next_button.configure(text="NEXT QUESTION")
+        self.next_button.set_enabled(False)
+        self.draw_reference()
+
+    def answer(self, index):
+        if self.finished or self.answered is not None:
+            return
+        self.answered = index
+        question = shipyard.QUESTIONS[self.quiz_index]
+        correct = index == question["correct"]
+        if correct:
+            self.quiz_score += 1
+        for position, option in enumerate(self.options):
+            if position == question["correct"]:
+                option.set_state("correct")
+            elif position == index:
+                option.set_state("wrong")
+            else:
+                option.set_state("dim")
+        prefix = "CORRECT · " if correct else "NOT QUITE · "
+        self.feedback.configure(text=prefix + question["explain"],
+                                fg=YELLOW if correct else TEXT)
+        self.quiz_progress.configure(
+            text="QUESTION {0} / {1} · {2} CORRECT".format(
+                self.quiz_index + 1, len(shipyard.QUESTIONS), self.quiz_score))
+        self.next_button.set_enabled(True)
+
+    def next_question(self):
+        if self.finished:
+            self.reset_quiz()
+            return
+        if self.answered is None:
+            return
+        self.quiz_index += 1
+        if self.quiz_index >= len(shipyard.QUESTIONS):
+            self.finish_quiz()
+            return
+        self.load_question()
+
+    def finish_quiz(self):
+        self.finished = True
+        total = len(shipyard.QUESTIONS)
+        self.question.configure(
+            text="EXAM COMPLETE · {0} / {1} CORRECT".format(self.quiz_score,
+                                                             total),
+            fg=YELLOW)
+        for option in self.options:
+            option.pack_forget()
+        if self.quiz_score == total:
+            note = "Perfect paper. The hangar chief signs it without reading."
+        elif self.quiz_score >= round(total * 0.8):
+            note = "A solid cadet paper. The launch crew will take you seriously."
+        else:
+            note = "Read the dossiers, then run the exam again."
+        self.feedback.configure(text=note, fg=TEXT)
+        self.quiz_progress.configure(text="HANGAR CERTIFICATE · SESSION ONLY")
+        self.next_button.configure(text="RUN EXAM AGAIN")
+        self.next_button.set_enabled(True)
+
+    def reset_quiz(self):
+        self.finished = False
+        self.quiz_index = 0
+        self.quiz_score = 0
+        for option in self.options:
+            option.pack(fill="x", pady=(0, 5), before=self.feedback)
+        self.load_question()
+
+    def on_digit(self, digit):
+        if self.finished:
+            return
+        index = int(digit) - 1
+        if 0 <= index < len(self.options):
+            self.answer(index)
+
+    def on_key(self, name, pressed):
+        if name == "pause" and pressed:
+            self.app.back_to_title()
 
 
 class App:
     KEY_MAP = {"Up": "up", "Down": "down", "Left": "left", "Right": "right",
                "space": "space", "w": "up", "a": "left", "s": "down",
-               "d": "right", "p": "pause", "Escape": "pause"}
+               "d": "right", "p": "pause", "m": "slow",
+               "Escape": "pause"}
 
     def __init__(self, root, pilot=None):
         self.root = root
@@ -1737,9 +3047,10 @@ class App:
         self.pending_option = None
         self.recorded = False
         self.last_run_improved = False
+        self.presentation = False
         self.fullscreen = False
 
-        root.configure(bg=BG)
+        set_root_bg(root)
         root.protocol("WM_DELETE_WINDOW", self.guard(self.close))
 
         footer = tk.Frame(root, bg=BG)
@@ -1815,11 +3126,15 @@ class App:
     def show_auth(self):
         self.show(lambda parent, app: AuthScreen(parent, app))
 
+    def show_hangar(self):
+        self.show(lambda parent, app: HangarScreen(parent, app))
+
     def show_mission(self, index):
         self.mission_index = index
         self.show(lambda parent, app: MissionScreen(parent, app, index))
 
     def start_missions(self):
+        self.presentation = False
         self.score = 0
         self.results = []
         self.mission_index = 0
@@ -1827,6 +3142,19 @@ class App:
         self.recorded = False
         self.last_run_improved = False
         self.show_mission(0)
+
+    def begin_presentation(self, index):
+        if index < 0 or index >= len(MISSIONS):
+            return
+        self.presentation = True
+        self.score = 0
+        self.results = []
+        self.mission_index = index
+        self.pending_index = index
+        self.pending_option = None
+        self.recorded = False
+        self.last_run_improved = False
+        self.show_mission(index)
 
     def begin_flight(self, index, option):
         self.pending_index = index
@@ -1849,6 +3177,9 @@ class App:
         self.show(lambda parent, app: OutcomeScreen(parent, app, index, option, record))
 
     def finish_run(self):
+        if self.presentation:
+            self.back_to_title()
+            return
         if not self.recorded:
             self.recorded = True
             self.last_run_improved = self.pilot.record(
@@ -1856,6 +3187,9 @@ class App:
         self.show(lambda parent, app: FinalScreen(parent, app))
 
     def advance(self):
+        if self.presentation:
+            self.back_to_title()
+            return
         next_index = self.mission_index + 1
         if next_index < len(MISSIONS):
             self.show_mission(next_index)
@@ -1866,6 +3200,7 @@ class App:
         self.back_to_title()
 
     def back_to_title(self):
+        self.presentation = False
         self.score = 0
         self.results = []
         self.mission_index = 0
@@ -1984,10 +3319,14 @@ class App:
 
 
 def create_root():
-    root = tk.Tk()
+    if ctk is not None:
+        ctk.set_appearance_mode("dark")
+        root = ctk.CTk(fg_color=BG)
+    else:
+        root = tk.Tk()
     root.title(WINDOW_TITLE)
     root.minsize(900, 600)
-    root.configure(bg=BG)
+    set_root_bg(root)
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
     width = min(1120, max(900, screen_w - 120))

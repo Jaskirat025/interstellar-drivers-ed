@@ -59,8 +59,9 @@ jobs:
       - name: Stamp macOS bundle version
         if: runner.os == 'macOS'
         run: |
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.0" "dist/InterstellarDriversEd.app/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.2.0" "dist/InterstellarDriversEd.app/Contents/Info.plist"
+          PLIST="dist/InterstellarDriversEd.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.2.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.2.0" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 1.2.0" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1.2.0" "$PLIST"
 
       - name: Package macOS build
         if: runner.os == 'macOS'

@@ -1,114 +1,57 @@
-# Three-minute judge route
+# Three-minute judge route · v1.2.0
 
-**The Interstellar Driver's Ed** is a local-only desktop game. No API keys, accounts, tenants or network are needed. Auth0 and Tiger Data are clearly labelled simulations.
+A complete pass through the desktop game. No account, API key or network is used.
 
-## Launch
-
-From the repository root:
+## Before the clock starts
 
 ```bash
 python -m pip install -r requirements.txt
 python simulator.py
 ```
 
-Use `python3` if that is your launcher. The window opens at 1120 × 760 and can be resized down to 900 × 600.
+The window opens at 900 × 600 or larger. If there is no audio device, the game stays silent and everything else works.
 
-## Live-demo shortcut
+## 0:00–0:25 · Title and pilot
 
-Press **PRESENTATION · JUMP TO MISSION** on the title screen and choose mission 01, 02 or 03. This skips the sign-in and earlier missions, marks the briefing and HUD as a presentation, and never writes the demo score to the local pilot record. The picker is shown in [screenshots/11-presentation.png](screenshots/11-presentation.png).
+1. Point out the real 3D scene behind the title: X-wing, Star Destroyer and planet, all software-rendered polygons.
+2. Leave the callsign as `CADET-X` (or type a name) and press **START MISSION**.
+3. The Auth0 sequence is a local simulation. Let the progress bar finish and press **ENTER THE COCKPIT**. The astronaut on the left is a 3D model.
 
-## The route
+## 0:25–1:15 · Mission 01 and the load trim
 
-Times assume you keep the flights short. The full three-mission run can take longer while you learn the controls.
+1. Read the Falcon 9 briefing and choose **2% TIBANNA ADDITIVE** for the optimal plan.
+2. Wait for the countdown. R2-D2 gives the first CAPCOM call.
+3. Use `↑` / `↓` to keep the yellow mixture line inside the moving band.
+4. Hold the band until the tank reaches 100%. Major Vega warns when injector strain climbs.
+5. On the debrief, note the stability and load charts; press continue.
 
-### 0:00 · Title and pilot log (20 s)
+## 1:15–2:05 · Mission 02 and the hoverslam
 
-- Type a callsign, or keep the default `CADET-X`.
-- Point out the local pilot record: best score, flights, best rank. The record is stored as local JSON, not in a cloud tenant.
-- Press **START MISSION** to enter the simulated Auth0 flow.
-- **HANGAR** opens the 3D hangar and the cadet exam if you want to show it first.
+1. Choose **LET THE LANDING DROID FLY**.
+2. The 3D booster hangs over an oblique drone-ship deck. Altitude, vertical speed and fuel are live.
+3. Hold `Space` for the landing burn, use `←` / `→` for RCS, and watch R2-D2's calls: altitude, drift, fuel.
+4. Touch down below 9.5 m/s and inside the target. The debrief explains the miss, speed and fuel bonus.
 
-### 0:20 · Simulated Auth0 (15 s)
+## 2:05–2:35 · Mission 03 and the debris run
 
-- The progress bar runs through authorization window, local claims and session token.
-- Every row says what it is doing; the token is generated locally with `hashlib`.
-- Press **ENTER THE COCKPIT** when the token is issued.
+1. Choose **LET THE DROID FLY** (or the leading-edge shield plan).
+2. Steer with `←` / `→`; `M` shows the slow-motion HUD without changing the physics.
+3. Dodge the rocks, watch the hull pips and close-call counter, and finish the twenty-second run.
 
-### 0:35 · Mission 01, load trim (40 s)
+## 2:35–2:55 · Hangar, five ships and the exam
 
-- Pick a flight plan with `1`, `2`, `3` or a click.
-- Keep the mixture inside the moving band with `↑` / `↓` (or `W` / `S`).
-- The HUD shows load, drift and strain; an injector-strain abort is a real outcome, not a scripted cutscene.
-- The debrief shows real telemetry in a Canvas chart.
+1. Return to the title and open **HANGAR**.
+2. Drag the X-wing to orbit, use the wheel to zoom, press `A` to pause auto-orbit and `R` to reset.
+3. Switch between **X-WING**, **TIE**, **ISD**, **FALCON** and **STARSHIP**. Each tab changes the dossier and the 3D model.
+4. Answer one cadet-exam question with `1`–`3`; the reference card is a separate shaded 3D view. The exam is session-only and does not touch the mission score.
+5. Point out `SOUND · ON` in the footer: it persists the preference in the local pilot record.
 
-### 1:15 · Mission 02, hoverslam (40 s)
+## 2:55–3:00 · Close
 
-- Choose a landing plan, then use **Space** (or `↑`) for the landing engine and `←` / `→` for RCS.
-- Touch down under 9.5 m/s and inside the target. Fuel, wind and difficulty all come from the decision.
-- Point out the impact wording when a landing fails: the game distinguishes a touchdown from a vehicle loss.
+1. Return to the title, then finish the run to show the final score, rank and simulated Tiger Data save.
+2. Mention the release: the Windows zip contains `InterstellarDriversEd.exe`; the macOS zip contains `InterstellarDriversEd.app`.
+3. Everything is offline. The only file written is `~/.interstellar_drivers_ed/pilot.json`.
 
-### 1:55 · Mission 03, debris run + slow motion (45 s)
+## If the judge only has 60 seconds
 
-- Choose the shield plan, then steer the X-wing with `←` / `→` (or `A` / `D`).
-- Press **M** to toggle the 0.35× slow motion: scanlines, vignette and the HUD badge appear while the simulation clock actually slows.
-- Press **M** again to release. The hull and close-call counters are live.
-
-### 2:40 · Debrief and final log (20 s)
-
-- The debrief combines the decision score, flight bonus and a per-mission chart. In presentation mode the button returns to the title and the demo score is discarded.
-- After mission 03, the final log shows the 390-point ceiling and simulates the Tiger Data hypertable save.
-- The pilot record is updated locally.
-
-### Optional · Hangar and 20-model exam
-
-Open **HANGAR** from the title screen, drag to orbit the X-wing, TIE fighter or Star Destroyer, then answer the SpaceX cadet exam with `1`, `2`, `3` or a click. Each of the twenty questions swaps in a different rotating 3D reference model. The gallery is in [screenshots/09-exam-models.png](screenshots/09-exam-models.png).
-
-## If you only have 60 seconds
-
-1. Open **HANGAR**, drag a model and answer one exam question.
-2. Return to the title, start a mission, make one decision and play for a few seconds.
-3. Press **M** to show slow motion, then open the debrief.
-
-That is enough to see the custom 3D renderer, the game loop and the telemetry debrief.
-
-## What to look for
-
-- **3D from first principles:** `shipyard.py` builds meshes from vertices and faces, rotates and shades them, projects them and depth-sorts the result for Tk Canvas. No OpenGL, image sprites or 3D library.
-- **Twenty unique exam models:** the hangar exam is not a static quiz; every question has its own reference mesh and auto-fit framing.
-- **Three different control loops:** propellant trim, a hoverslam and a top-down debris run. The decision at the start of each mission changes the flight that follows.
-- **Sponsor flows without a demo tax:** Auth0 and Tiger Data keep their real vocabulary and choreography, but run locally. A judge never needs a tenant, key or network.
-- **Finished edges:** pause, restart, abort, fullscreen, in-app error panel, local pilot JSON, real screenshots and tests.
-- **Deterministic Canvas art:** starfields, charts and ship viewers are drawn in Python, so the visual language stays consistent without web assets.
-
-## MLH judging map
-
-| Criterion | Where to look |
-| --- | --- |
-| Technical difficulty | Software 3D renderer in `shipyard.py`; 20 exam meshes; Canvas telemetry charts in `dataviz.py` |
-| Game feel | Three real-time missions, countdown, pause, slow motion, debriefs and scoring |
-| Theme | SpaceX engineering through a Star Wars lens, with fictional materials clearly labelled |
-| Sponsor track | Simulated Auth0 and Tiger Data flows that preserve the real vocabulary and stay offline |
-| Polish | 900 × 600 layout, keyboard and mouse controls, error panel, local record, CI-built Windows/macOS bundles |
-| Reliability | No runtime network, no secrets, no external image or chart dependencies; 36 tests |
-
-## Verify locally
-
-Full suite, including GUI tests:
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-Headless data, vector-art and geometry tests:
-
-```bash
-python -m unittest tests.test_dataviz tests.test_visuals tests.test_shipyard -v
-```
-
-## Before submitting
-
-- [ ] Run the full test suite and the headless suite.
-- [ ] Play the title → auth → one mission → debrief path once at 1120 × 760 and once at 900 × 600.
-- [ ] Check the README quickstart and the Windows/macOS download links.
-- [ ] Create the `v1.1.0` tag when the release assets are ready; the GitHub Actions workflow builds both zips and publishes the release.
-- [ ] Open the landing page from a local static server and confirm the eight photos and two films load.
+Title → **PRESENTATION · JUMP TO MISSION** → Mission 01 → choose the optimal load → show the 3D load screen and CAPCOM → title → **HANGAR** → drag the X-wing → switch to **FALCON** → answer one exam question.

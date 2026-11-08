@@ -21,9 +21,13 @@ try:
 except Exception:  # keeps the core game importable without the optional shell
     ctk = None
 
+import audio as audio_engine
 import dataviz
+import engine3d
+import fleet3d
 import shipyard
 import visuals
+import visuals3d
 
 BG = "#000000"
 YELLOW = "#FFE81F"
@@ -35,7 +39,7 @@ IS_WIN = sys.platform.startswith("win")
 SANS = "Helvetica Neue" if IS_MAC else ("Segoe UI" if IS_WIN else "DejaVu Sans")
 MONO = "Menlo" if IS_MAC else ("Consolas" if IS_WIN else "DejaVu Sans Mono")
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 WINDOW_TITLE = "The Interstellar Driver's Ed · Rebel-SpaceX Flight Simulator"
 FOOTER_TEXT = "v{0} · local pilot log · simulated sponsor integrations".format(APP_VERSION)
 RECORD_FOLDER = ".interstellar_drivers_ed"
@@ -75,6 +79,7 @@ class PilotStore:
         self.best_rank = ""
         self.flights = 0
         self.last_callsign = ""
+        self.sound_on = True
         self.load()
 
     def load(self):
@@ -96,6 +101,7 @@ class PilotStore:
         rank = raw.get("best_rank", "")
         if isinstance(rank, str):
             self.best_rank = rank[:32]
+        self.sound_on = bool(raw.get("sound_on", True))
 
     def record(self, score, callsign, rank):
         """Save a completed flight and return True when the score is a record."""
@@ -105,6 +111,15 @@ class PilotStore:
             self.best_score = score
             self.best_rank = rank
         self.last_callsign = (callsign or "")[:20]
+        self._write()
+        return improved
+
+    def set_sound(self, enabled):
+        """Persist the sound preference without touching flight records."""
+        self.sound_on = bool(enabled)
+        self._write()
+
+    def _write(self):
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
@@ -113,13 +128,13 @@ class PilotStore:
                 "best_rank": self.best_rank,
                 "flights": self.flights,
                 "last_callsign": self.last_callsign,
+                "sound_on": self.sound_on,
             }
             temporary = self.path.with_name(self.path.name + ".tmp")
             temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
             temporary.replace(self.path)
         except Exception:
             pass
-        return improved
 
 
 MISSIONS = [
@@ -382,6 +397,9 @@ class FlatButton(tk.Frame):
         self.hover = False
         self.apply()
 
+    def set_text(self, text):
+        self.label.configure(text=text)
+
     def on_enter(self, _event=None):
         if self.enabled and not self.hover:
             self.hover = True
@@ -406,6 +424,9 @@ class FlatButton(tk.Frame):
         if now - self.last_click < 0.25:   # ignore rapid double clicks
             return
         self.last_click = now
+        audio = getattr(self.app, "audio", None)
+        if audio is not None:
+            audio.play("click", 0.18)
         if self.command is not None:
             self.command()
 
@@ -531,6 +552,9 @@ if ctk is not None:
             self.enabled = bool(enabled)
             self.hover = False
             self.apply()
+
+        def set_text(self, text):
+            self.configure(text=text)
 
         def on_enter(self, _event=None):
             if self.enabled and not self.hover:
@@ -782,12 +806,7 @@ class TitleScreen(Screen):
         if self.width < 40 or self.height < 40:
             return
         w, h = self.width, self.height
-        visuals.draw_orbit(c, w * 0.82, h * 0.24, min(w, h) * 0.34,
-                           min(w, h) * 0.21, visuals.GRID, (2, 10))
-        visuals.draw_planet(c, w * 0.84, h * 0.20, min(w, h) * 0.19, MUTED)
-        visuals.draw_star_destroyer(c, w * 0.20, h * 0.07,
-                                    min(w, h) * 0.10, MUTED)
-        visuals.draw_xwing(c, w * 0.12, h * 0.79, min(w, h) * 0.075, MUTED)
+        visuals3d.draw_title(c, w, h, tag="art3d")
         visuals.draw_corner_marks(c, 22, 22, w - 22, h - 22, MUTED, 18)
         c.create_text(w - 26, h - 42, anchor="se",
                       text="LOCAL FLIGHT OPERATIONS // 01",
@@ -1001,7 +1020,14 @@ class AuthScreen(Screen):
         h = self.art.winfo_height()
         if w < 20 or h < 20:
             return
-        visuals.draw_auth_art(self.art, w, h, self.progress, fnt(7, mono=True))
+        visuals3d.draw_crew_portrait(self.art, "astronaut", w, h,
+                                     tag="auth3d")
+        self.art.create_text(12, 12, anchor="nw", text="LOCAL IDENTITY",
+                             fill=YELLOW, font=fnt(7, "bold", mono=True),
+                             tags="auth3d")
+        self.art.create_text(12, h - 12, anchor="sw", text="AUTH0 // SIMULATED",
+                             fill=MUTED, font=fnt(7, mono=True),
+                             tags="auth3d")
 
     def on_resize(self, event):
         width = max(240, event.width - 64)
@@ -1183,11 +1209,23 @@ class ChoiceCard(tk.Frame):
         if now - self.last_click < 0.25:
             return
         self.last_click = now
+        audio = getattr(self.app, "audio", None)
+        if audio is not None:
+            audio.play("click", 0.18)
         if self.command is not None:
             self.command()
 
 
 class MissionScreen(Screen):
+    CAPCOM = (
+        "Load is a combustion problem, not a plumbing one. Methane, oxygen, "
+        "and a metered two percent of Tibanna.",
+        "The droid has the descent. Trust the automation, or take it and own "
+        "the deck.",
+        "Read the rocks before they read you. Keep the shield between the "
+        "hull and the field.",
+    )
+
     def __init__(self, parent, app, index):
         Screen.__init__(self, parent, app)
         self.index = index
@@ -1198,9 +1236,11 @@ class MissionScreen(Screen):
         self.locked = False
         self.overlay = None
         self.buttons = []
+        self.app.audio.loop("ambient", 0.08)
         self.build()
         self.art.bind("<Configure>", self.g(self.draw_art))
         self.right.bind("<Configure>", self.g(self.on_right_resize))
+        self.app.schedule(120, self.draw_tip_portrait)
         self.app.schedule(240, self.type_step)
 
     def build(self):
@@ -1246,6 +1286,22 @@ class MissionScreen(Screen):
         self.art.pack(fill="both", expand=True)
         tk.Label(left, text=self.mission["caption"], font=fnt(8, mono=True),
                  bg=BG, fg=MUTED, anchor="w").pack(fill="x", pady=(8, 0))
+
+        tip_panel = tk.Frame(left, bg=BG, highlightthickness=1,
+                             highlightbackground=MUTED)
+        tip_panel.pack(fill="x", pady=(8, 0))
+        self.tip_canvas = tk.Canvas(tip_panel, width=48, height=48, bg=BG,
+                                    bd=0, highlightthickness=0, takefocus=0)
+        self.tip_canvas.pack(side="left", padx=(5, 7), pady=3)
+        tip_copy = tk.Frame(tip_panel, bg=BG)
+        tip_copy.pack(side="left", fill="x", expand=True, pady=3)
+        tk.Label(tip_copy, text="K-3PO · MISSION CONTROL",
+                 font=fnt(7, "bold", mono=True), bg=BG, fg=YELLOW,
+                 anchor="w").pack(fill="x")
+        self.tip_label = tk.Label(tip_copy, text=self.CAPCOM[self.index],
+                                  font=fnt(8), bg=BG, fg=TEXT, anchor="w",
+                                  justify="left", wraplength=300)
+        self.tip_label.pack(fill="x")
 
         self.right = tk.Frame(body, bg=BG)
         self.right.grid(row=0, column=1, sticky="nsew")
@@ -1334,6 +1390,7 @@ class MissionScreen(Screen):
         self.locked = True
         option = self.mission["options"][index]
         self.score_label.configure(text=score_text(self.app.score))
+        self.app.audio.play("confirm", 0.30)
         self.app.begin_flight(self.index, option)
 
     # -- line art ------------------------------------------------------
@@ -1344,25 +1401,29 @@ class MissionScreen(Screen):
         height = c.winfo_height()
         if width < 60 or height < 60:
             return
-        visuals.draw_backdrop(c, width, height, stars=20)
-        visuals.draw_orbit(c, width * 0.50, height * 0.50,
-                           width * 0.43, height * 0.27, visuals.GRID, (2, 10))
-        visuals.draw_planet(c, width * 0.84, height * 0.18,
-                            min(width, height) * 0.13, MUTED)
+        visuals3d.draw_mission(c, self.index, width, height, tag="art3d")
         c.create_text(14, 14, anchor="nw", text="MISSION 0{0}".format(self.index + 1),
                       fill=YELLOW, font=fnt(8, "bold", mono=True))
         c.create_text(width - 14, 14, anchor="ne", text="{0} / 03".format(self.index + 1),
                       fill=MUTED, font=fnt(7, mono=True))
-        figure = self.mission["figure"]
-        if figure == "falcon":
-            self.draw_falcon(c, width, height)
-        elif figure == "starfighter":
-            self.draw_starfighter(c, width, height)
-        else:
-            self.draw_shield(c, width, height)
         visuals.draw_corner_marks(c, 12, 12, width - 12, height - 12, MUTED, 10)
         c.create_text(width - 14, height - 14, anchor="se",
                       text="NO UPLINK", fill=MUTED, font=fnt(7, mono=True))
+
+    def draw_tip_portrait(self, _event=None):
+        canvas = self.tip_canvas
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 20 or height < 20:
+            self.app.schedule(80, self.draw_tip_portrait)
+            return
+        visuals3d.draw_crew_portrait(canvas, "astromech", width, height,
+                                     tag="tip")
+        canvas.create_text(width / 2, height - 4, anchor="s", text="K-3PO",
+                           fill=YELLOW, font=fnt(6, "bold", mono=True),
+                           tags="tip")
 
     def draw_falcon(self, c, w, h):
         cx = w * 0.52
@@ -1512,10 +1573,9 @@ class FlightScreen(Screen):
         self.pause_overlay = None
         self.keys = {"up": False, "down": False, "left": False,
                      "right": False, "space": False}
-        self.stars = [{"x": random.random(), "y": random.random(),
-                       "r": random.choice((1, 1, 2)),
-                       "c": random.choice((MUTED, MUTED, TEXT))}
-                      for _ in range(72)]
+        self.last_beep = None
+        self.capcom_text = ""
+        self.app.audio.loop("engine", 0.08)
         self.build()
         if self.mode == "load":
             self.setup_load()
@@ -1559,18 +1619,91 @@ class FlightScreen(Screen):
         self.canvas.bind("<Configure>", self.g(self.draw))
         bottom = tk.Frame(self, bg=BG)
         bottom.pack(fill="x", padx=26, pady=(4, 10))
+        self.capcom_canvas = tk.Canvas(bottom, width=38, height=38, bg=BG,
+                                      bd=0, highlightthickness=0,
+                                      takefocus=0)
+        self.capcom_canvas.pack(side="left", padx=(0, 8))
+        capcom = tk.Frame(bottom, bg=BG)
+        capcom.pack(side="left", fill="x", expand=True)
+        director = self.mode == "load"
+        self.capcom_name = tk.Label(
+            capcom,
+            text="FLIGHT DIRECTOR · MAJOR VEGA" if director else "CAPCOM · R2-D2",
+            font=fnt(7, "bold", mono=True), bg=BG, fg=YELLOW, anchor="w")
+        self.capcom_name.pack(fill="x")
+        self.hint = tk.Label(capcom, text="", font=fnt(8), bg=BG, fg=TEXT,
+                             anchor="w", justify="left", wraplength=480)
+        self.hint.pack(fill="x")
         if self.mode == "load":
-            hint = "↑ / ↓  TRIM MIXTURE  ·  HOLD THE BAND  ·  P PAUSE  ·  M SLOW-MO"
+            controls = "↑ / ↓  TRIM MIXTURE  ·  P PAUSE  ·  M SLOW-MO"
         elif self.mode == "landing":
-            hint = "SPACE / ↑  LANDING BURN  ·  ← →  RCS  ·  P PAUSE  ·  M SLOW-MO"
+            controls = "SPACE / ↑  LANDING BURN  ·  ← →  RCS  ·  P PAUSE"
         else:
-            hint = "← →  STEER  ·  AVOID THE DEBRIS  ·  P PAUSE  ·  M SLOW-MO"
-        self.hint = tk.Label(bottom, text=hint, font=fnt(8, mono=True),
-                             bg=BG, fg=MUTED, anchor="w")
-        self.hint.pack(side="left")
+            controls = "← →  STEER  ·  AVOID THE DEBRIS  ·  P PAUSE  ·  M SLOW-MO"
+        self.controls = tk.Label(capcom, text=controls, font=fnt(6, mono=True),
+                                 bg=BG, fg=MUTED, anchor="w")
+        self.controls.pack(fill="x")
         self.status = tk.Label(bottom, text="", font=fnt(8, mono=True),
                                bg=BG, fg=MUTED, anchor="e")
         self.status.pack(side="right")
+        bottom.bind("<Configure>", self.g(self.on_bottom_resize))
+        self.app.schedule(140, self.draw_capcom_portrait)
+
+    def on_bottom_resize(self, event):
+        self.hint.configure(wraplength=max(150, event.width - 150))
+
+    def draw_capcom_portrait(self, _event=None):
+        canvas = self.capcom_canvas
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 16 or height < 16:
+            self.app.schedule(80, self.draw_capcom_portrait)
+            return
+        kind = "astronaut" if self.mode == "load" else "astromech"
+        visuals3d.draw_crew_portrait(canvas, kind, width, height,
+                                     tag="capcom")
+
+    def update_capcom(self):
+        if self.phase == "countdown":
+            text = "Hold for telemetry. Watch the band; I will call the limits."
+        elif self.mode == "load":
+            error = abs(self.mix - self.target)
+            if self.strain > 1.6:
+                text = "Injector strain is climbing. Ease back into the band."
+            elif error <= self.band:
+                text = "Good. Hold that mixture; the stack is happy."
+            elif self.mix < self.target:
+                text = "Mixture is lean. Bring it up, gently."
+            else:
+                text = "Mixture is rich. Trim it down, gently."
+        elif self.mode == "landing":
+            if self.alt > 600:
+                text = "You have altitude. Save the burn for the deck."
+            elif self.fuel < 20:
+                text = "Fuel is critical. One clean burn, no wasted taps."
+            elif abs(self.x) > self.target_half * 2:
+                text = "You are drifting. RCS toward the centre."
+            elif self.alt < 220 and not self.burning:
+                text = "Light the engine. Now."
+            else:
+                text = "Small inputs. Let the deck come to you."
+        else:
+            nearest = min(self.debris,
+                          key=lambda rock: abs(rock["y"] - 0.88),
+                          default=None)
+            if self.hull <= 1:
+                text = "Hull critical. Keep the nose clean."
+            elif nearest is not None and nearest["x"] < self.ship_x - 0.08:
+                text = "Rock on your left. Ease right."
+            elif nearest is not None and nearest["x"] > self.ship_x + 0.08:
+                text = "Rock on your right. Ease left."
+            else:
+                text = "Steady. Thread the gap and keep the shield up."
+        if text != self.capcom_text:
+            self.capcom_text = text
+            self.hint.configure(text=text)
 
     # -- input ---------------------------------------------------------
     def on_key(self, name, pressed):
@@ -1595,14 +1728,18 @@ class FlightScreen(Screen):
         self.paused = not self.paused
         self.clear_keys()
         if self.paused:
+            self.app.audio.stop_loop()
             self.show_pause()
         else:
+            self.app.audio.loop("engine", 0.08)
             self.hide_pause()
+        self.app.audio.play("click", 0.20)
 
     def toggle_slowmo(self):
         if self.phase == "ending" or self.delivered:
             return
         self.slowmo = not self.slowmo
+        self.app.audio.play("click", 0.18)
 
     def show_pause(self):
         self.pause_overlay = tk.Frame(self, bg=BG)
@@ -1651,9 +1788,14 @@ class FlightScreen(Screen):
             sim_dt = dt * (self.SLOW_FACTOR if self.slowmo else 1.0)
             if self.phase == "countdown":
                 self.countdown -= sim_dt
+                number = max(1, int(math.ceil(self.countdown)))
+                if number != self.last_beep:
+                    self.last_beep = number
+                    self.app.audio.play("warning", 0.16)
                 if self.countdown <= 0:
                     self.countdown = 0.0
                     self.phase = "flying"
+                    self.app.audio.play("confirm", 0.22)
             elif self.phase == "flying":
                 self.elapsed += sim_dt
                 if self.mode == "load":
@@ -1672,6 +1814,7 @@ class FlightScreen(Screen):
             self.update_particles(sim_dt)
             self.flash = max(0.0, self.flash - sim_dt * 3.0)
         self.update_hud()
+        self.update_capcom()
         self.draw()
         if not self.delivered:
             self.app.schedule(30 if not self.paused else 120, self.tick)
@@ -1710,6 +1853,8 @@ class FlightScreen(Screen):
         self.phase = "ending"
         self.end_delay = 1.1 if success else 1.5
         self.flash = 0.45 if success else 0.0
+        self.app.audio.stop_loop()
+        self.app.audio.play("success" if success else "impact", 0.32)
         if not success:
             self.shake = 14.0
             self.spawn_burst(0.5, 0.78, 22)
@@ -1923,12 +2068,6 @@ class FlightScreen(Screen):
         if w < 120 or h < 120:
             return
         c.create_rectangle(0, 0, w, h, fill=BG, outline="")
-        drift = (self.elapsed * 0.004) % 1.0
-        for star in self.stars:
-            x = star["x"] * w
-            y = ((star["y"] + drift) % 1.0) * h
-            r = star["r"]
-            c.create_oval(x - r, y - r, x + r, y + r, fill=star["c"], outline="")
         if self.mode == "load":
             self.draw_load(c, w, h)
         elif self.mode == "landing":
@@ -2007,9 +2146,18 @@ class FlightScreen(Screen):
                       fill=TEXT, font=fnt(7, mono=True))
 
     def draw_load(self, c, w, h):
+        visuals3d.draw_flight_load(c, self.load, self.mix, self.target,
+                                   self.band, self.strain, w, h,
+                                   tag="scene", elapsed=self.elapsed)
+        c.create_rectangle(0, 0, w * 0.20, h, fill=BG, outline="",
+                           stipple="gray50")
+        c.create_rectangle(w * 0.24, 0, w * 0.40, h, fill=BG, outline="",
+                           stipple="gray25")
+        c.create_rectangle(w * 0.58, 0, w, h, fill=BG, outline="",
+                           stipple="gray50")
         top, bottom = h * 0.18, h * 0.82
-        tank_x = w * 0.14
-        tank_w = min(92, w * 0.11)
+        tank_x = w * 0.045
+        tank_w = min(72, w * 0.085)
         c.create_text(tank_x, top - 18, text="METHALOX TANK", anchor="w",
                       fill=MUTED, font=fnt(8, mono=True))
         c.create_rectangle(tank_x, top, tank_x + tank_w, bottom, outline=MUTED)
@@ -2023,7 +2171,7 @@ class FlightScreen(Screen):
                       text="{0:03.0f}% LOAD".format(self.load),
                       fill=BG if self.load > 6 else YELLOW,
                       font=fnt(9, "bold", mono=True))
-        gx = w * 0.50
+        gx = w * 0.31
         c.create_text(gx, top - 18, text="MIXTURE VALVE", fill=MUTED, font=fnt(8, mono=True))
         c.create_rectangle(gx - 24, top, gx + 24, bottom, outline=MUTED)
         y_target = bottom - (bottom - top) * self.target / 100.0
@@ -2034,7 +2182,7 @@ class FlightScreen(Screen):
         c.create_line(gx - 34, y_mix, gx + 34, y_mix, fill=YELLOW, width=2)
         c.create_text(gx + 36, y_target, text="TARGET", anchor="w", fill=YELLOW,
                       font=fnt(8, mono=True))
-        tx = w * 0.64
+        tx = w * 0.66
         c.create_text(tx, top + 8, anchor="nw", text="MIXTURE  {0:03.0f}%".format(self.mix),
                       fill=TEXT, font=fnt(10, mono=True))
         c.create_text(tx, top + 34, anchor="nw", text="TARGET   {0:03.0f}%".format(self.target),
@@ -2056,6 +2204,9 @@ class FlightScreen(Screen):
                       fill=MUTED, font=fnt(8, mono=True))
 
     def draw_landing(self, c, w, h):
+        visuals3d.draw_flight_landing(c, self.alt, self.alt_max, self.x,
+                                      self.burning, self.fuel, w, h,
+                                      tag="scene", elapsed=self.elapsed)
         deck_y = h - 46.0
         max_alt = self.alt_max
         def alt_y(value):
@@ -2066,38 +2217,6 @@ class FlightScreen(Screen):
             c.create_line(w * 0.30, y, w * 0.94, y, fill=MUTED, dash=(2, 6))
             c.create_text(w * 0.30, y - 6, text="{0} M".format(tick), anchor="w",
                           fill=MUTED, font=fnt(7, mono=True))
-        c.create_rectangle(0, h - 30, w, h, fill=BG, outline="")
-        for i in range(7):
-            x = w * (0.04 + i * 0.15)
-            c.create_line(x, h - 26, x + w * 0.09, h - 26, fill=MUTED)
-        deck_w = w * 0.46
-        deck_x = w / 2 - deck_w / 2
-        c.create_rectangle(deck_x, deck_y, deck_x + deck_w, deck_y + 16,
-                           fill=BG, outline=YELLOW)
-        c.create_line(deck_x, deck_y + 16, deck_x + 18, h - 12, fill=YELLOW)
-        c.create_line(deck_x + deck_w, deck_y + 16, deck_x + deck_w - 18, h - 12, fill=YELLOW)
-        half_px = self.target_half / 280.0 * w * 0.36
-        c.create_line(w / 2 - half_px, deck_y + 8, w / 2 + half_px, deck_y + 8,
-                      fill=YELLOW, width=2)
-        c.create_text(w / 2, deck_y - 10, text="TARGET", fill=MUTED, font=fnt(7, mono=True))
-        bx = w / 2 + (self.x / 280.0) * (w * 0.36)
-        bx = max(32, min(w - 32, bx))
-        by = deck_y - 16 if (self.alt <= 0 and self.success) else alt_y(self.alt)
-        if not (self.phase == "ending" and not self.success):
-            c.create_line(bx, by - 20, bx, by + 10, fill=YELLOW, width=2)
-            c.create_polygon(bx - 7, by + 10, bx, by + 27, bx + 7, by + 10,
-                             fill="", outline=YELLOW)
-            c.create_line(bx - 8, by + 10, bx - 22, by + 22, fill=YELLOW)
-            c.create_line(bx + 8, by + 10, bx + 22, by + 22, fill=YELLOW)
-        if self.burning and self.phase == "flying":
-            for offset, width in ((0, 7), (2, 4), (-2, 4)):
-                length = random.randint(22, 50) + abs(offset) * 2
-                c.create_polygon(bx - width, by + 26 + offset,
-                                 bx, by + 26 + length,
-                                 bx + width, by + 26 + offset,
-                                 fill=YELLOW if offset == 0 else TEXT,
-                                 outline="")
-        c.create_line(bx, deck_y, bx, h - 12, fill=MUTED, dash=(2, 5))
         wind = self.wind_strength * math.sin(self.run_time * 0.85 + 0.5)
         for i in range(3):
             y = 54 + i * 14
@@ -2119,31 +2238,9 @@ class FlightScreen(Screen):
                            h - 17, fill=YELLOW, outline="")
 
     def draw_debris(self, c, w, h):
-        for i in range(18):
-            x = (i * 173 % 997) / 997.0 * w
-            y = ((i * 311 + int(self.elapsed * 140)) % 997) / 997.0 * h
-            c.create_line(x, y, x, y + 8, fill=MUTED)
-        for rock in self.debris:
-            x, y = rock["x"] * w, rock["y"] * h
-            r = rock["r"] * min(w, h)
-            points = []
-            for i in range(6):
-                angle = rock["rot"] + i * math.pi / 3.0
-                points.extend([x + r * math.cos(angle), y + r * math.sin(angle)])
-            c.create_polygon(points, outline=rock["c"], fill="")
-        sx, sy = self.ship_x * w, h - 62
-        c.create_line(sx - 28, sy, sx - 8, sy - 6, fill=YELLOW, width=2)
-        c.create_line(sx + 28, sy, sx + 8, sy - 6, fill=YELLOW, width=2)
-        c.create_line(sx - 8, sy - 6, sx + 8, sy - 6, fill=YELLOW, width=2)
-        c.create_polygon(sx, sy - 16, sx + 5, sy - 4, sx + 5, sy + 8, sx - 5, sy + 8,
-                         sx - 5, sy - 4, fill="", outline=YELLOW)
-        c.create_line(sx - 4, sy + 8, sx - 8, sy + 18, fill=YELLOW)
-        c.create_line(sx + 4, sy + 8, sx + 8, sy + 18, fill=YELLOW)
-        if self.hull > 0:
-            c.create_arc(sx - 40, sy - 32, sx + 40, sy + 26, start=205, extent=130,
-                         style="arc", outline=YELLOW)
-            c.create_arc(sx - 52, sy - 42, sx + 52, sy + 36, start=215, extent=110,
-                         style="arc", outline=MUTED, dash=(3, 4))
+        visuals3d.draw_flight_debris(c, self.ship_x, self.debris, self.hull,
+                                     self.max_hull, w, h, tag="scene",
+                                     elapsed=self.elapsed)
         c.create_rectangle(6, 6, 172, 34, fill=BG, outline=MUTED)
         c.create_text(14, 18, anchor="nw", text="HULL", fill=MUTED, font=fnt(8, mono=True))
         for i in range(self.max_hull):
@@ -2470,14 +2567,17 @@ class FinalScreen(Screen):
 class ChipButton(tk.Frame):
     """Square selector tab used by the hangar."""
 
-    def __init__(self, parent, text, command, selected=False):
+    def __init__(self, parent, text, command, selected=False, compact=False):
         tk.Frame.__init__(self, parent, bg=BG, highlightthickness=1,
                           highlightbackground=MUTED)
         self.command = command
         self.selected = selected
         self.hover = False
-        self.label = tk.Label(self, text=text, font=fnt(8, "bold", mono=True),
-                              bg=BG, fg=TEXT, padx=8, pady=6)
+        self.compact = bool(compact)
+        self.label = tk.Label(self, text=text,
+                              font=fnt(7 if compact else 8, "bold", mono=True),
+                              bg=BG, fg=TEXT, padx=5 if compact else 8,
+                              pady=5 if compact else 6)
         self.label.pack(fill="both", expand=True)
         for widget in (self, self.label):
             widget.bind("<Button-1>", self.on_click)
@@ -2617,28 +2717,39 @@ class QuizOption(tk.Frame):
 
 
 class HangarScreen(Screen):
-    """Local 3D ship viewer plus a short interactive ship exam."""
+    """Interactive 3D hangar with orbit controls, an instructor and an exam."""
+
+    TAB_NAMES = {"xwing": "X-WING", "tie": "TIE", "destroyer": "ISD",
+                 "falcon9": "FALCON", "starship": "STARSHIP"}
+    TAB_KEYS = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
 
     def __init__(self, parent, app):
         Screen.__init__(self, parent, app)
         self.ship_index = 0
-        self.yaw = 0.6
-        self.pitch = 0.16
-        self.zoom = shipyard.SHIPS[0]["zoom"]
-        self.last_polygons = 0
+        self.yaw = fleet3d.SHIPS[0]["yaw"]
+        self.pitch = fleet3d.SHIPS[0]["pitch"]
+        self.zoom = fleet3d.SHIPS[0]["zoom"]
+        self.auto = True
         self.dragging = False
         self.last_pointer = (0, 0)
         self.resume_at = 0.0
+        self.elapsed = 0.0
+        self.last_polygons = 0
+        self.env_ready = False
+        self.last_paint = 0.0
+        self.paint_token = 0
         self.quiz_index = 0
         self.quiz_score = 0
         self.answered = None
         self.finished = False
+        self.ref_model = None
+        self.ref_name = ""
 
         bar = tk.Frame(self, bg=BG)
         bar.pack(fill="x", padx=28, pady=(14, 0))
         tk.Label(bar, text="HANGAR / SHIPYARD", font=fnt(9, "bold", mono=True),
                  bg=BG, fg=YELLOW).pack(side="left")
-        tk.Label(bar, text="LOCAL 3D RENDER · NO ASSETS",
+        tk.Label(bar, text="REAL-TIME 3D BAY · NO ASSETS",
                  font=fnt(8, mono=True), bg=BG, fg=MUTED).pack(side="left",
                                                               padx=(14, 0))
         FlatButton(bar, app, "BACK TO TITLE", self.g(app.back_to_title),
@@ -2657,31 +2768,53 @@ class HangarScreen(Screen):
         self.viewer = tk.Canvas(left, bg=BG, bd=0, highlightthickness=1,
                                 highlightbackground=MUTED, takefocus=0)
         self.viewer.pack(fill="both", expand=True)
-        self.viewer.bind("<Configure>", self.g(self.paint_viewer))
+        self.viewer.bind("<Configure>", self.g(self.on_viewer_resize))
         self.viewer.bind("<ButtonPress-1>", self.g(self.on_drag_start))
         self.viewer.bind("<B1-Motion>", self.g(self.on_drag))
         self.viewer.bind("<ButtonRelease-1>", self.g(self.on_drag_end))
-        self.ref_model = None
-        self.ref_name = ""
-        self.ref_yaw = 0.55
-        self.ref_zoom = None
-        self.ref_canvas = tk.Canvas(self.viewer, bg=BG, bd=0,
-                                    highlightthickness=1,
-                                    highlightbackground=MUTED, takefocus=0,
-                                    width=150, height=108)
-        self.ref_canvas.place(x=20, y=20, width=150, height=108)
+        self.viewer.bind("<MouseWheel>", self.g(self.on_wheel))
+        self.viewer.bind("<Button-4>", self.g(self.on_wheel))
+        self.viewer.bind("<Button-5>", self.g(self.on_wheel))
 
         tabs = tk.Frame(left, bg=BG)
         tabs.pack(fill="x", pady=(8, 0))
         self.tabs = []
-        for index, ship in enumerate(shipyard.SHIPS):
-            tab = ChipButton(tabs, ship["name"], self.g(self.pick_ship(index)))
+        for index, ship in enumerate(fleet3d.SHIPS):
+            tab = ChipButton(tabs, self.TAB_NAMES[ship["id"]],
+                             self.g(self.pick_ship(index)),
+                             compact=True)
             tab.pack(side="left", padx=(0, 6))
             self.tabs.append(tab)
         self.tabs[0].set_selected(True)
-        tk.Label(left, text="DRAG TO ORBIT · AUTO ROTATE · LOCAL GEOMETRY",
-                 font=fnt(7, mono=True), bg=BG, fg=MUTED,
-                 anchor="w").pack(fill="x", pady=(7, 0))
+
+        tip_frame = tk.Frame(left, bg=BG, highlightthickness=1,
+                             highlightbackground=MUTED)
+        tip_frame.pack(fill="x", pady=(8, 0))
+        self.tip_canvas = tk.Canvas(tip_frame, width=56, height=56, bg=BG,
+                                    bd=0, highlightthickness=0, takefocus=0)
+        self.tip_canvas.pack(side="left", padx=(5, 8), pady=4)
+        tip_text = tk.Frame(tip_frame, bg=BG)
+        tip_text.pack(side="left", fill="x", expand=True, pady=3)
+        self.tip_title = tk.Label(
+            tip_text, text="MAJOR VEGA · FLIGHT INSTRUCTOR",
+            font=fnt(7, "bold", mono=True), bg=BG, fg=YELLOW, anchor="w")
+        self.tip_title.pack(fill="x")
+        self.tip_label = tk.Label(
+            tip_text, text="", font=fnt(8), bg=BG, fg=TEXT, anchor="w",
+            justify="left", wraplength=280)
+        self.tip_label.pack(fill="x", pady=(2, 0))
+        self.tip_canvas.bind("<Configure>", self.g(self.draw_tip_portrait))
+
+        controls = tk.Frame(left, bg=BG)
+        controls.pack(fill="x", pady=(6, 0))
+        tk.Label(controls, text="DRAG ORBIT · WHEEL ZOOM",
+                 font=fnt(7, mono=True), bg=BG, fg=MUTED).pack(side="left")
+        self.auto_button = FlatButton(controls, app, "AUTO ON",
+                                      self.g(self.toggle_auto), "outline",
+                                      size=7, padx=7, pady=4)
+        self.auto_button.pack(side="right", padx=(5, 0))
+        FlatButton(controls, app, "RESET", self.g(self.reset_view),
+                   "outline", size=7, padx=7, pady=4).pack(side="right")
 
         right = tk.Frame(body, bg=BG)
         right.grid(row=0, column=1, sticky="nsew")
@@ -2690,13 +2823,13 @@ class HangarScreen(Screen):
                            highlightbackground=MUTED)
         dossier.pack(fill="x")
         inner = tk.Frame(dossier, bg=BG)
-        inner.pack(fill="x", padx=14, pady=11)
+        inner.pack(fill="x", padx=14, pady=10)
         self.ship_title = tk.Label(inner, text="", font=fnt(14, "bold"),
                                    bg=BG, fg=YELLOW, anchor="w")
         self.ship_title.pack(fill="x")
         self.ship_class = tk.Label(inner, text="", font=fnt(7, mono=True),
                                    bg=BG, fg=MUTED, anchor="w")
-        self.ship_class.pack(fill="x", pady=(2, 6))
+        self.ship_class.pack(fill="x", pady=(2, 5))
         self.ship_values = {}
         for caption, key in (("ROLE", "role"), ("CREW", "crew"),
                              ("LENGTH", "length"), ("ARMAMENT", "arms")):
@@ -2712,14 +2845,14 @@ class HangarScreen(Screen):
         self.ship_note = tk.Label(inner, text="", font=fnt(8), bg=BG,
                                   fg=MUTED, anchor="w", justify="left",
                                   wraplength=290)
-        self.ship_note.pack(fill="x", pady=(7, 0))
+        self.ship_note.pack(fill="x", pady=(5, 0))
 
         quiz = tk.Frame(right, bg=BG, highlightthickness=1,
                         highlightbackground=MUTED)
         quiz.pack(fill="both", expand=True, pady=(10, 0))
         self.quiz_panel = quiz
         room = tk.Frame(quiz, bg=BG)
-        room.pack(fill="both", expand=True, padx=14, pady=11)
+        room.pack(fill="both", expand=True, padx=14, pady=10)
 
         head = tk.Frame(room, bg=BG)
         head.pack(fill="x")
@@ -2728,37 +2861,57 @@ class HangarScreen(Screen):
         self.quiz_progress = tk.Label(head, text="", font=fnt(7, mono=True),
                                       bg=BG, fg=MUTED, anchor="e")
         self.quiz_progress.pack(side="right")
-        self.question = tk.Label(room, text="", font=fnt(9), bg=BG, fg=TEXT,
-                                 anchor="w", justify="left", wraplength=300)
-        self.question.pack(fill="x", pady=(8, 7))
+
+        question_row = tk.Frame(room, bg=BG)
+        question_row.pack(fill="x", pady=(7, 5))
+        self.ref_canvas = tk.Canvas(question_row, width=94, height=72, bg=BG,
+                                    bd=0, highlightthickness=1,
+                                    highlightbackground=visuals.GRID,
+                                    takefocus=0)
+        self.ref_canvas.pack(side="left", padx=(0, 9))
+        self.ref_canvas.bind("<Configure>", self.g(self.draw_reference))
+        self.question = tk.Label(question_row, text="", font=fnt(9), bg=BG,
+                                 fg=TEXT, anchor="w", justify="left",
+                                 wraplength=185)
+        self.question.pack(side="left", fill="x", expand=True)
+
         self.options = []
         for number in range(3):
             option = QuizOption(
                 room, number + 1,
                 self.g(lambda index=number: self.answer(index)))
-            option.pack(fill="x", pady=(0, 5))
+            option.pack(fill="x", pady=(0, 4))
             self.options.append(option)
         self.feedback = tk.Label(room, text="", font=fnt(8), bg=BG, fg=MUTED,
                                  anchor="w", justify="left", wraplength=300)
-        self.feedback.pack(fill="x", pady=(3, 6))
+        self.feedback.pack(fill="x", pady=(2, 5))
         self.next_button = FlatButton(room, app, "NEXT QUESTION",
                                       self.g(self.next_question), "primary",
-                                      size=9, padx=12, pady=7)
+                                      size=9, padx=12, pady=6)
         self.next_button.pack(anchor="e")
         self.next_button.set_enabled(False)
         quiz.bind("<Configure>", self.g(self.on_quiz_resize))
 
         self.set_ship(0, redraw=False)
         self.load_question()
-        self.app.schedule(60, self.tick)
+        self.app.schedule(140, self.draw_reference)
+        self.app.audio.loop("ambient", 0.10)
+        self.app.schedule(90, self.first_paint)
+        self.app.schedule(70, self.tick)
 
     # -- 3D viewer ------------------------------------------------------
+    def first_paint(self):
+        self.paint_viewer()
+        self.draw_tip_portrait()
+
     def pick_ship(self, index):
         return lambda: self.set_ship(index)
 
     def set_ship(self, index, redraw=True):
+        if index < 0 or index >= len(fleet3d.SHIPS):
+            return
         self.ship_index = index
-        ship = shipyard.SHIPS[index]
+        ship = fleet3d.SHIPS[index]
         self.zoom = ship["zoom"]
         self.yaw = ship["yaw"]
         self.pitch = ship["pitch"]
@@ -2769,107 +2922,50 @@ class HangarScreen(Screen):
         for key, label in self.ship_values.items():
             label.configure(text=str(ship[key]).upper())
         self.ship_note.configure(text=ship["note"])
+        self.env_ready = False
+        self.set_tip(ship["note"] + " Drag to orbit the display.")
         if redraw:
-            self.draw_ship()
-            self.draw_hud()
+            self.paint_viewer()
+            self.app.audio.play("servo", 0.25)
 
-    def paint_viewer(self, _event=None):
+    def on_viewer_resize(self, _event=None):
+        self.env_ready = False
+        self.paint_token += 1
+        token = self.paint_token
+
+        def paint():
+            if token == self.paint_token and self.winfo_exists():
+                self.paint_viewer()
+        self.app.schedule(70, paint)
+
+    def paint_viewer(self):
         canvas = self.viewer
+        if not canvas.winfo_exists():
+            return
         width = canvas.winfo_width()
         height = canvas.winfo_height()
         if width < 40 or height < 40:
             return
-        canvas.delete("all")
-        visuals.draw_backdrop(canvas, width, height, stars=26)
-        visuals.draw_orbit(canvas, width / 2.0, height / 2.0,
-                           min(width, height) * 0.44,
-                           min(width, height) * 0.17, visuals.GRID, (2, 12))
-        visuals.draw_corner_marks(canvas, 10, 10, width - 10, height - 10,
-                                  MUTED, 11)
+        ship = fleet3d.SHIPS[self.ship_index]
+        visuals3d.draw_hangar_environment(canvas, ship, width, height,
+                                          tag="env")
         self.draw_ship()
         self.draw_hud()
-        size = int(max(120, min(210, width * 0.36)))
-        ref_height = int(size * 0.72)
-        self.ref_canvas.place_configure(
-            x=max(8, width - size - 14),
-            y=max(8, height - ref_height - 14),
-            width=size, height=ref_height)
-        self.ref_zoom = None
-        self.draw_reference()
+        self.env_ready = True
+        self.last_paint = time.monotonic()
 
     def draw_ship(self):
         canvas = self.viewer
-        canvas.delete("ship")
+        if not canvas.winfo_exists():
+            return
         width = canvas.winfo_width()
         height = canvas.winfo_height()
         if width < 40 or height < 40:
             return
-        ship = shipyard.SHIPS[self.ship_index]
-        inner_width = max(40, width - 54)
-        inner_height = max(40, height - 54)
-        frame = shipyard.build_frame(shipyard.MODELS[ship["id"]],
-                                     inner_width, inner_height,
-                                     self.yaw, self.pitch, self.zoom)
-        self.last_polygons = len(frame)
-        offset_x = (width - inner_width) / 2.0
-        offset_y = (height - inner_height) / 2.0
-        for polygon in frame:
-            points = []
-            for x, y in polygon["points"]:
-                points.extend((x + offset_x, y + offset_y))
-            canvas.create_polygon(points, fill=polygon["fill"],
-                                  outline=polygon["outline"], width=1,
-                                  tags="ship")
-
-    def fit_reference(self):
-        canvas = self.ref_canvas
-        width = canvas.winfo_width()
-        height = canvas.winfo_height()
-        if width < 40 or height < 40 or self.ref_model is None:
-            self.ref_zoom = None
-            return
-        widest, tallest = 1.0, 1.0
-        for yaw in (0.0, 0.5, 1.0, 1.5, 2.0, 2.5):
-            frame = shipyard.build_frame(self.ref_model, width, height - 24,
-                                         yaw, 0.2, 1.0)
-            xs = [x for polygon in frame for x, _ in polygon["points"]]
-            ys = [y for polygon in frame for _, y in polygon["points"]]
-            if not xs or not ys:
-                continue
-            widest = max(widest, max(xs) - min(xs))
-            tallest = max(tallest, max(ys) - min(ys))
-        self.ref_zoom = min(3.0, 0.9 * min((width - 18) / widest,
-                                          (height - 36) / tallest))
-
-    def draw_reference(self):
-        canvas = self.ref_canvas
-        width = canvas.winfo_width()
-        height = canvas.winfo_height()
-        canvas.delete("all")
-        if width < 30 or height < 30 or self.ref_model is None:
-            return
-        if self.ref_zoom is None:
-            self.fit_reference()
-        zoom = self.ref_zoom or 1.0
-        canvas.create_line(width / 2.0, 6, width / 2.0, height - 20,
-                           fill=visuals.GRID)
-        canvas.create_line(6, (height - 20) / 2.0, width - 6,
-                           (height - 20) / 2.0, fill=visuals.GRID)
-        frame = shipyard.build_frame(self.ref_model, width, height - 22,
-                                     self.ref_yaw, 0.2, zoom)
-        for polygon in frame:
-            points = []
-            for x, y in polygon["points"]:
-                points.extend((x, y))
-            canvas.create_polygon(points, fill=polygon["fill"],
-                                  outline=polygon["outline"], tags="ref")
-        canvas.create_text(6, 4, anchor="nw", fill=MUTED,
-                           text="EXAM REF · {0:02d}".format(
-                               self.quiz_index + 1),
-                           font=fnt(6, mono=True))
-        canvas.create_text(width - 6, height - 4, anchor="se", fill=YELLOW,
-                           text=self.ref_name,
-                           font=fnt(7, "bold", mono=True))
+        ship = fleet3d.SHIPS[self.ship_index]
+        self.last_polygons = visuals3d.draw_hangar_ship(
+            canvas, ship, self.yaw, self.pitch, self.zoom, width, height,
+            tag="ship", elapsed=self.elapsed, auto=self.auto)
 
     def draw_hud(self):
         canvas = self.viewer
@@ -2878,30 +2974,38 @@ class HangarScreen(Screen):
         height = canvas.winfo_height()
         if width < 40 or height < 40:
             return
-        ship = shipyard.SHIPS[self.ship_index]
-        canvas.create_text(14, 14, anchor="nw", tags="hud",
-                           text="MODEL 0{0} · {1}".format(self.ship_index + 1,
-                                                          ship["name"]),
+        ship = fleet3d.SHIPS[self.ship_index]
+        canvas.create_text(14, 12, anchor="nw", tags="hud",
+                           text="BAY 07 · ORBITAL HANGAR",
                            fill=YELLOW, font=fnt(8, "bold", mono=True))
-        canvas.create_text(width - 14, 14, anchor="ne", tags="hud",
+        canvas.create_text(width - 14, 12, anchor="ne", tags="hud",
                            text="YAW {0:03.0f}° · PITCH {1:+03.0f}°".format(
                                math.degrees(self.yaw) % 360,
                                math.degrees(self.pitch)),
                            fill=MUTED, font=fnt(7, mono=True))
-        canvas.create_text(14, height - 14, anchor="sw", tags="hud",
-                           text="POLYGONS {0}".format(self.last_polygons),
+        canvas.create_text(14, height - 12, anchor="sw", tags="hud",
+                           text="MODEL 0{0} · {1}".format(
+                               self.ship_index + 1, ship["name"]),
+                           fill=TEXT, font=fnt(7, mono=True))
+        canvas.create_text(width - 14, height - 12, anchor="se", tags="hud",
+                           text="{0} POLYGONS · AUTO {1}".format(
+                               self.last_polygons,
+                               "ON" if self.auto else "OFF"),
                            fill=MUTED, font=fnt(7, mono=True))
+        canvas.create_rectangle(5, 5, width - 5, height - 5,
+                                outline="#20272E", tags="hud")
 
     def tick(self):
         if not self.winfo_exists():
             return
-        if not self.dragging and time.monotonic() >= self.resume_at:
-            self.yaw += 0.012
-        self.ref_yaw += 0.02
+        self.elapsed += 0.06
+        if not self.env_ready:
+            self.paint_viewer()
+        if self.auto and not self.dragging and time.monotonic() >= self.resume_at:
+            self.yaw += 0.011
         self.draw_ship()
         self.draw_hud()
-        self.draw_reference()
-        self.app.schedule(60, self.tick)
+        self.app.schedule(55, self.tick)
 
     def on_drag_start(self, event):
         self.dragging = True
@@ -2913,22 +3017,95 @@ class HangarScreen(Screen):
         dx = event.x - self.last_pointer[0]
         dy = event.y - self.last_pointer[1]
         self.last_pointer = (event.x, event.y)
-        self.yaw += dx * 0.012
+        self.yaw += dx * 0.011
         self.pitch = max(-1.05, min(1.05, self.pitch + dy * 0.008))
         self.draw_ship()
         self.draw_hud()
 
     def on_drag_end(self, _event=None):
+        if self.dragging:
+            self.app.audio.play("servo", 0.18)
         self.dragging = False
-        self.resume_at = time.monotonic() + 1.8
+        self.resume_at = time.monotonic() + 2.2
+
+    def on_wheel(self, event):
+        direction = 0
+        if getattr(event, "num", None) == 4:
+            direction = 1
+        elif getattr(event, "num", None) == 5:
+            direction = -1
+        else:
+            delta = getattr(event, "delta", 0)
+            direction = 1 if delta > 0 else -1 if delta < 0 else 0
+        if direction:
+            self.zoom_by(1.08 if direction > 0 else 1 / 1.08)
+        return "break"
+
+    def zoom_by(self, factor):
+        self.zoom = max(0.55, min(2.4, self.zoom * factor))
+        self.draw_ship()
+        self.draw_hud()
+
+    def toggle_auto(self):
+        self.auto = not self.auto
+        self.auto_button.set_text("AUTO ON" if self.auto else "AUTO OFF")
+        self.set_tip("Auto-orbit is {0}. Drag the ship to take over.".format(
+            "on" if self.auto else "paused"))
+        self.app.audio.play("click", 0.2)
+
+    def reset_view(self):
+        ship = fleet3d.SHIPS[self.ship_index]
+        self.yaw = ship["yaw"]
+        self.pitch = ship["pitch"]
+        self.zoom = ship["zoom"]
+        self.auto = True
+        self.auto_button.set_text("AUTO ON")
+        self.resume_at = 0.0
+        self.draw_ship()
+        self.draw_hud()
+        self.set_tip("Display reset. Drag to inspect the hull.")
+        self.app.audio.play("confirm", 0.22)
+
+    def on_raw_key(self, name, pressed):
+        if not pressed:
+            return
+        lowered = name.lower()
+        if lowered in ("a", "left"):
+            self.toggle_auto()
+        elif lowered in ("r", "right"):
+            self.reset_view()
+        elif lowered in ("plus", "equal", "kp_add"):
+            self.zoom_by(1.12)
+        elif lowered in ("minus", "kp_subtract"):
+            self.zoom_by(1 / 1.12)
+
+    # -- instructor -----------------------------------------------------
+    def set_tip(self, text):
+        self.tip_label.configure(text=text)
+
+    def draw_tip_portrait(self, _event=None):
+        canvas = self.tip_canvas
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width < 24 or height < 24:
+            self.app.schedule(80, self.draw_tip_portrait)
+            return
+        visuals3d.draw_crew_portrait(canvas, "astronaut", width, height,
+                                     tag="tip")
+        canvas.create_text(width / 2, height - 5, anchor="s", text="VEGA",
+                           fill=YELLOW, font=fnt(6, "bold", mono=True),
+                           tags="tip")
 
     # -- exam -----------------------------------------------------------
     def on_quiz_resize(self, event):
-        width = max(180, event.width - 40)
-        self.question.configure(wraplength=width)
+        width = max(160, event.width - 46)
+        self.question.configure(wraplength=max(110, width - 110))
         self.feedback.configure(wraplength=width)
         for option in self.options:
             option.set_wraplength(width - 64)
+        self.draw_reference()
 
     def load_question(self):
         self.answered = None
@@ -2937,8 +3114,6 @@ class HangarScreen(Screen):
             shipyard.QUESTION_MODEL_IDS[self.quiz_index]]
         self.ref_model = reference["mesh"]
         self.ref_name = reference["name"]
-        self.ref_yaw = 0.55
-        self.ref_zoom = None
         self.quiz_progress.configure(
             text="QUESTION {0} / {1} · {2} CORRECT".format(
                 self.quiz_index + 1, len(shipyard.QUESTIONS), self.quiz_score))
@@ -2947,9 +3122,50 @@ class HangarScreen(Screen):
             option.set_state("idle")
             option.set_text(text)
         self.feedback.configure(text="", fg=MUTED)
-        self.next_button.configure(text="NEXT QUESTION")
+        self.next_button.set_text("NEXT QUESTION")
         self.next_button.set_enabled(False)
         self.draw_reference()
+        self.set_tip("Question {0}: read the reference on the scope, then "
+                     "pick one.".format(self.quiz_index + 1))
+
+    def draw_reference(self, _event=None):
+        canvas = self.ref_canvas
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        canvas.delete("all")
+        if width < 30 or height < 30 or self.ref_model is None:
+            return
+        canvas.create_rectangle(0, 0, width, height, fill=BG, outline="")
+        canvas.create_line(width / 2, 5, width / 2, height - 16,
+                           fill=visuals.GRID)
+        canvas.create_line(5, height / 2, width - 5, height / 2,
+                           fill=visuals.GRID)
+        widest, tallest = 1.0, 1.0
+        for yaw in (0.0, 0.5, 1.0, 1.5, 2.0):
+            frame = shipyard.build_frame(self.ref_model, width, height - 22,
+                                         yaw, 0.2, 1.0)
+            xs = [x for polygon in frame for x, _y in polygon["points"]]
+            ys = [y for polygon in frame for _x, y in polygon["points"]]
+            if xs and ys:
+                widest = max(widest, max(xs) - min(xs))
+                tallest = max(tallest, max(ys) - min(ys))
+        zoom = min(2.8, 0.82 * min((width - 10) / widest,
+                                   (height - 32) / tallest))
+        frame = shipyard.build_frame(self.ref_model, width, height - 20,
+                                     0.55, 0.2, zoom)
+        for polygon in frame:
+            points = []
+            for x, y in polygon["points"]:
+                points.extend((x, y))
+            canvas.create_polygon(points, fill=polygon["fill"],
+                                  outline=polygon["outline"])
+        canvas.create_text(4, 3, anchor="nw", fill=MUTED,
+                           text="Q {0:02d} REF".format(self.quiz_index + 1),
+                           font=fnt(6, mono=True))
+        canvas.create_text(width - 4, height - 3, anchor="se", fill=YELLOW,
+                           text=self.ref_name, font=fnt(6, "bold", mono=True))
 
     def answer(self, index):
         if self.finished or self.answered is not None:
@@ -2959,6 +3175,9 @@ class HangarScreen(Screen):
         correct = index == question["correct"]
         if correct:
             self.quiz_score += 1
+            self.app.audio.play("confirm", 0.32)
+        else:
+            self.app.audio.play("deny", 0.28)
         for position, option in enumerate(self.options):
             if position == question["correct"]:
                 option.set_state("correct")
@@ -2973,8 +3192,11 @@ class HangarScreen(Screen):
             text="QUESTION {0} / {1} · {2} CORRECT".format(
                 self.quiz_index + 1, len(shipyard.QUESTIONS), self.quiz_score))
         self.next_button.set_enabled(True)
+        self.set_tip(("Good answer. " if correct else "Not quite. ")
+                     + question["explain"])
 
     def next_question(self):
+        self.app.audio.play("click", 0.22)
         if self.finished:
             self.reset_quiz()
             return
@@ -3003,15 +3225,18 @@ class HangarScreen(Screen):
             note = "Read the dossiers, then run the exam again."
         self.feedback.configure(text=note, fg=TEXT)
         self.quiz_progress.configure(text="HANGAR CERTIFICATE · SESSION ONLY")
-        self.next_button.configure(text="RUN EXAM AGAIN")
+        self.next_button.set_text("RUN EXAM AGAIN")
         self.next_button.set_enabled(True)
+        self.set_tip(note)
+        self.app.audio.play("success" if self.quiz_score >= total * 0.8
+                            else "deny", 0.30)
 
     def reset_quiz(self):
         self.finished = False
         self.quiz_index = 0
         self.quiz_score = 0
         for option in self.options:
-            option.pack(fill="x", pady=(0, 5), before=self.feedback)
+            option.pack(fill="x", pady=(0, 4), before=self.feedback)
         self.load_question()
 
     def on_digit(self, digit):
@@ -3043,6 +3268,7 @@ class App:
         self.mission_index = 0
         self.callsign = ""
         self.pilot = pilot or PilotStore()
+        self.audio = audio_engine.Audio(enabled=self.pilot.sound_on)
         self.pending_index = 0
         self.pending_option = None
         self.recorded = False
@@ -3056,8 +3282,18 @@ class App:
         footer = tk.Frame(root, bg=BG)
         footer.pack(side="bottom", fill="x")
         tk.Frame(footer, bg=MUTED, height=1).pack(fill="x")
-        tk.Label(footer, text=FOOTER_TEXT, font=fnt(8), bg=BG,
-                 fg=MUTED).pack(pady=6)
+        footer_row = tk.Frame(footer, bg=BG)
+        footer_row.pack(fill="x", padx=18)
+        tk.Label(footer_row, text=FOOTER_TEXT, font=fnt(8), bg=BG,
+                 fg=MUTED).pack(side="left", pady=6)
+        self.sound_label = tk.Label(
+            footer_row,
+            text="SOUND · ON" if self.audio.enabled else "SOUND · OFF",
+            font=fnt(8, "bold", mono=True), bg=BG,
+            fg=YELLOW if self.audio.enabled else MUTED)
+        self.sound_label.pack(side="right", pady=6)
+        self.sound_label.configure(cursor="hand2")
+        self.sound_label.bind("<Button-1>", self.guard(self.toggle_sound))
 
         self.container = tk.Frame(root, bg=BG)
         self.container.pack(side="top", fill="both", expand=True)
@@ -3105,6 +3341,10 @@ class App:
 
     # -- screens -------------------------------------------------------
     def show(self, factory):
+        try:
+            self.audio.stop_loop()
+        except Exception:
+            pass
         try:
             self.cancel_all()
             self.clear_error()
@@ -3221,6 +3461,9 @@ class App:
         handler = getattr(screen, "on_key", None)
         if not callable(handler):
             return
+        raw = getattr(screen, "on_raw_key", None)
+        if callable(raw):
+            raw(event.keysym, True)
         key = self.KEY_MAP.get(event.keysym)
         if key is None:
             key = self.KEY_MAP.get(event.keysym.lower())
@@ -3236,6 +3479,9 @@ class App:
         handler = getattr(screen, "on_key", None)
         if not callable(handler):
             return
+        raw = getattr(screen, "on_raw_key", None)
+        if callable(raw):
+            raw(event.keysym, False)
         key = self.KEY_MAP.get(event.keysym)
         if key is None:
             key = self.KEY_MAP.get(event.keysym.lower())
@@ -3307,7 +3553,21 @@ class App:
         finally:
             self.reporting = False
 
+    def toggle_sound(self, _event=None):
+        enabled = not self.audio.enabled
+        self.audio.set_enabled(enabled)
+        self.pilot.set_sound(enabled)
+        self.sound_label.configure(
+            text="SOUND · ON" if enabled else "SOUND · OFF",
+            fg=YELLOW if enabled else MUTED)
+        if enabled:
+            self.audio.play("confirm", 0.30)
+
     def close(self):
+        try:
+            self.audio.stop_all()
+        except Exception:
+            pass
         try:
             self.cancel_all()
         except Exception:

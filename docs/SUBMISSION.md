@@ -1,68 +1,58 @@
-# MLH Hack Week submission copy
+# MLH Hack Week submission · The Interstellar Driver's Ed
 
-## One-line pitch
+## One line
 
-A playable SpaceX × Star Wars desktop flight simulator with a software-rendered 3D hangar, three real-time missions and a twenty-model cadet exam.
+A complete offline desktop flight simulator that turns SpaceX engineering into three playable Star Wars missions, with a software 3D engine, procedural audio and a five-ship hangar.
 
-## Elevator pitch
+## Track
 
-The Interstellar Driver's Ed is a native desktop game, not a click-through prototype. You sign in through a local Auth0 simulation, choose a flight plan, then fly three different control loops: trim a propellant load, land a booster on a drone ship, and steer an X-wing through debris. Between missions, orbit hand-built 3D ships in the hangar and take a twenty-question SpaceX cadet exam where every question has its own rotating reference model. The whole experience is offline: no API keys, no tenants, no network calls. Tkinter and CustomTkinter provide the chrome; the ships, starfields, HUD and charts are drawn locally on Tk Canvas.
+Desktop and games.
 
-## Built for MLH Hack Week
+## What is playable
 
-- **Track:** desktop and games.
-- **Playable first:** three missions with countdowns, HUDs, pause, restart and debriefs.
-- **Sponsor stories:** Auth0 and Tiger Data are represented honestly as local simulations, with their real vocabulary and choreography intact.
-- **Demo-safe:** a judge can install one dependency and run the game without an account or an internet connection.
-- **Presentation-ready:** jump straight to any mission from the title; demo scores are visibly marked and never saved.
-- **Finished:** 36 tests, a headless test path, real screenshots, an animated tour and Windows/macOS builds in GitHub Actions.
+- **Mission 01 — propellant load:** keep a Falcon 9 methane/oxygen/Tibanna mixture inside a moving band; injector strain can abort the pad.
+- **Mission 02 — hoverslam:** land a booster on a drone ship with one engine, limited fuel, wind, RCS and a narrow deck.
+- **Mission 03 — debris run:** steer an X-wing through twenty seconds of wreckage; shield choice sets the hull limit.
+- **Hangar:** orbit and zoom five hand-built 3D ships, read dossiers, and take a twenty-question SpaceX cadet exam.
+- **Scoring:** decision points plus a flight bonus; the ceiling is **390**. Five ranks from Ground Crew to Jedi Ace.
+- **Presentation mode:** jump to any mission from the title without touching the local record.
+- **Accessibility:** keyboard-only play, pause/restart/abort, fullscreen, sound toggle, silent fallback.
 
-## How it was built
+## What is technically interesting
 
-- `simulator.py`: Tkinter/CustomTkinter shell, title and auth flow, three flight models, debriefs, hangar and exam UI.
-- `shipyard.py`: hand-built mesh primitives and twenty distinct exam models, plus a pure-Python projector with rotation, shading and depth sorting.
-- `visuals.py`: Canvas vector art, starfields, ships, planets, HUDs and registration marks.
-- `dataviz.py`: dependency-free telemetry and score metrics for the debrief charts.
-- `index.html`: a separate self-contained archive page for the NASA photography and films; the game is never embedded in it.
+1. **A software 3D engine in pure Python.** `engine3d.py` implements meshes, orbit cameras, perspective projection, near-plane clipping, key/fill/rim shading, fog and depth sorting. It never imports Tk, so every model and scene is testable headlessly.
+2. **Hand-built geometry, no assets.** `fleet3d.py` contains the X-wing, TIE, Star Destroyer, Falcon 9, Starship, booster, drone ship, launch pad, hangar, planets, asteroids, astronaut and astromech. The hangar alone is about 1,500 faces; the X-wing about 800.
+3. **The hangar is a real interactive viewer.** The static bay is cached, the ship redraws on orbit/zoom, and the exam reference is a separate 3D view. Drag, wheel, `A` auto-orbit and `R` reset all work; the old overlay bug that swallowed drags is gone.
+4. **Procedural audio.** `audio.py` synthesises WAV effects at runtime with pygame. No audio files ship; if the mixer cannot start, the game is silent.
+5. **Characters with a job.** Major Vega, K-3PO and R2-D2 give contextual CAPCOM calls based on mixture error, altitude, drift, fuel and the nearest rock.
+6. **A real desktop release.** GitHub Actions runs the tests, builds a Windows folder + `.exe` and a macOS `.app` with PyInstaller, and attaches both zips to the release.
 
-## Challenges
+## Sponsors, honestly simulated
 
-- Making a readable 3D viewer without OpenGL, image sprites or a 3D library, then auto-framing twenty different meshes in a small exam panel.
-- Keeping the slow-motion effect honest: the visual treatment is cinematic, but the simulation clock, physics and mission timer really run at 0.35×.
-- Designing three control loops that feel different while sharing one HUD and one scoring model.
-- Keeping the demo reliable offline while still representing Auth0 and Tiger Data in a way judges can recognize.
+Auth0 and Tiger Data are represented by local simulations: a timed login choreography with a locally generated token, and a hypertable save counter. No tenant, key, account or network request is needed. Both screens say SIMULATION.
 
-## Accomplishments
+## Run
 
-- A presentation mode that jumps straight to any mission without saving a demo score.
-- A twenty-question exam where every question swaps in a different 3D model.
-- A correct score ceiling of 390 points, with decision scores, flight bonuses and rank thresholds covered by tests.
-- A polished 900 × 600-to-fullscreen layout with pause, restart, abort and an in-app error panel.
-- A local pilot record written as JSON, with corrupt-file fallback.
-- Real screenshots and an animated six-screen tour generated from the running app.
+```bash
+python -m pip install -r requirements.txt
+python simulator.py
+```
 
-## What we learned
+Or download the release:
 
-- A small software renderer is a constraint, but it makes the visual language deterministic and easy to test.
-- Sponsor integrations do not need live credentials to communicate their shape; they need to be clearly labelled and honest.
-- The best hackathon demo removes setup risk. Offline-first is a feature, not a limitation.
+- Windows: `InterstellarDriversEd-Windows.zip` → `InterstellarDriversEd.exe`
+- macOS: `InterstellarDriversEd-macOS.zip` → `InterstellarDriversEd.app`
 
-## What's next
+## Tests
 
-- More exam sets and ship variants, still using the same renderer.
-- A recorded voiceover walkthrough alongside the animated GIF.
-- Optional cloud-backed pilot records behind the Tiger Data simulation, kept opt-in.
+```bash
+python -m unittest discover -s tests -v
+```
 
-## Built with
+Covers the score ceiling, ranks, mission data, corrupt local JSON, chart metrics, the original shipyard and exam, the new 3D engine, fleet meshes and all Canvas scene painters. No display or audio device is required.
 
-Python · Tkinter · CustomTkinter · Tk Canvas · hashlib · JSON · Pillow (documentation GIF only) · GitHub Actions · PyInstaller · NASA public-domain media
+## Limitations
 
-## Links
-
-- [README](../README.md)
-- [Three-minute judge route](DEMO.md)
-- [Animated demo](demo.gif)
-- [Screenshots](screenshots/)
-- [Twenty-model gallery](screenshots/09-exam-models.png)
-
-Auth0 and Tiger Data are simulated locally. SpaceX, Star Wars and related marks belong to their respective owners; this is a fan-made hackathon project.
+- The bundles are unsigned; SmartScreen/Gatekeeper warnings are expected.
+- The archive landing page is separate from the game and is not embedded.
+- The Star Wars framing is unofficial fan material; SpaceX engineering is presented as the real reference.

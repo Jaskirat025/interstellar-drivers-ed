@@ -2,7 +2,7 @@
 
 The simulator keeps its flight results in memory. This module turns those
 records into a consistent set of bars and target marks without importing Tk,
-so the data rules can be tested on a headless machine.
+so the data rules can be tested on a headless machine
 """
 
 from dataclasses import dataclass

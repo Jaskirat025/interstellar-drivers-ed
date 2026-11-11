@@ -1,5 +1,7 @@
 # MLH Hack Week submission · The Interstellar Driver's Ed
 
+Created and developed by [Jaskirat025](https://github.com/Jaskirat025).
+
 ## One line
 
 A complete offline desktop flight simulator that turns SpaceX engineering into three playable Star Wars missions, with a software 3D engine, procedural audio and a five-ship hangar.

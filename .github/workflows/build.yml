@@ -94,6 +94,8 @@ jobs:
           body: |
             ## The Interstellar Driver's Ed
 
+            Created and developed by [Jaskirat025](https://github.com/Jaskirat025).
+
             A 3D desktop flight simulator: three SpaceX-inspired missions, a five-ship hangar, procedural audio and a software 3D engine.
 
             ### Download

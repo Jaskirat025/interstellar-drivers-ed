@@ -2,6 +2,8 @@
 
 **A 3D desktop flight simulator about three SpaceX-inspired missions, a five-ship hangar and the people who keep a launch crew alive.**
 
+**Created and developed by [Jaskirat025](https://github.com/Jaskirat025).**
+
 [![Latest release](https://img.shields.io/github/v/release/Jaskirat025/interstellar-drivers-ed?color=FFE81F&label=release)](https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-FFE81F)](https://github.com/Jaskirat025/interstellar-drivers-ed/releases/latest)
 [![Python](https://img.shields.io/badge/source-Python%203.10%2B-3776AB)](requirements.txt)
@@ -128,6 +130,6 @@ The desktop workflow in `.github/workflows/build.yml` runs the tests, then PyIns
 
 ## Credits
 
-Built for MLH Hack Week. Spacecraft geometry and code are original; Star Wars names are used as a fan framing, not as official assets. NASA imagery in the companion archive is public domain and credited in `assets/photos/README.md`.
+Created, designed and developed by [Jaskirat025](https://github.com/Jaskirat025). Built for MLH Hack Week. Spacecraft geometry and code are original; Star Wars names are used as a fan framing, not as official assets. NASA imagery in the companion archive is public domain and credited in `assets/photos/README.md`.
 
 MIT license. See [LICENSE](LICENSE).
